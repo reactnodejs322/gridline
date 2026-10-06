@@ -1,0 +1,18 @@
+# macOS metadata
+.DS_Store
+
+# SwiftPM local state and build products
+.swiftpm/
+**/.build/
+
+# Locally built macOS application bundles
+*.app/
+
+# Gridline Debug runtime events, reports, and build diagnostics
+**/events.jsonl
+**/build/
+**/reports/*
+!**/reports/.gitkeep
+
+# Generated status for running versioned app copies
+/gridline_versions/runtime-status.json
