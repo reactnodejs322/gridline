@@ -46,3 +46,9 @@ Gridline Debug uses macOS Accessibility permission to inspect Gridline’s inter
 ## Project status
 
 Gridline is under active development. It focuses on organizing parallel terminal work: groups, folders, labels, navigation, and a persistent workspace layout. Closing or rebuilding the app ends active terminal sessions; the workspace organization is saved locally.
+
+## License and attribution
+
+Gridline's original code is © 2026 **reactnodejs322** and is licensed under **GNU GPL-3.0-or-later**. You may use, modify, and redistribute it under those terms. If you distribute a modified version, the GPL requires you to mark your changes and provide the corresponding source under the same license. Keep the license and copyright notices with copies of the project. See [LICENSE](LICENSE) for the terms.
+
+The Gridline name and logo identify this project; the software license does not grant trademark rights or permission to present another project as an official Gridline release or imply endorsement. Forks should use distinct branding. Third-party components keep their own licenses; see [NOTICE](NOTICE.md).
