@@ -5,11 +5,9 @@
   <p>Give each one a mission, its own terminal, and room to see it through.</p>
 </div>
 
-![Gridline showing a workspace with multiple terminal work groups](Horror.png)
+![A crowded terminal tab bar illustrates how parallel work gets hard to track](Horror.png)
 
-Every workflow begins with a human request: fix a bug, build a feature, prepare a release. Give it a name, set its project folder, and start one Codex agent in its own terminal. Its purpose is clear: carry your request forward. Gridline keeps each assignment in its own lane, with the bigger picture in view.
-
-Turn a crowded row of terminal tabs into a map of active work. Move between missions at a glance and keep your attention on the work you set in motion.
+That wall of tabs is the problem: every new request adds another place to lose context. Which agent is handling what? Which project belongs to this terminal? Gridline turns tab sprawl into a clear map of work. Give each human request a named workflow, its own Codex terminal, and the right project folder—then see every assignment side by side.
 
 ## A focused home for every workflow
 
@@ -19,6 +17,10 @@ Turn a crowded row of terminal tabs into a map of active work. Move between miss
 - **Keep parallel work legible.** Arrange groups in one, two, or three columns, collapse what is not in focus, and jump to an assignment from the sidebar.
 - **Return to an organized workspace.** Gridline saves group names, folders, labels, and layout on your Mac. Terminal sessions start fresh after the app closes.
 - **Built for macOS.** A native SwiftUI and AppKit app, with local terminal sessions powered by SwiftTerm.
+
+## Vibe-code your terminal workflow
+
+Gridline is open source and made to grow with the way you work. Use the companion **Gridline Debug** inspector to click an interface element, copy its Accessibility details and likely source-code path, then tell your coding assistant what you want changed. Describe the workflow you want; Gridline gives your assistant useful context to start shaping it.
 
 ## Build and run
 
