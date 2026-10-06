@@ -1,12 +1,13 @@
+<p align="left">
+  <img src="https://img.shields.io/badge/macOS-13%2B%20Support-18181b?style=for-the-badge&amp;logo=apple&amp;logoColor=white" alt="macOS 13+ support" />
+  <a href="#vibe-code-your-terminal-workflow"><img src="https://img.shields.io/badge/Vibe--code-Your%20Workflow-ff3045?style=for-the-badge" alt="Vibe-code your workflow" /></a>
+</p>
+
 <div align="center">
   <img src="logo/Gridline2x.png" alt="Gridline logo" width="160" />
   <h1>Gridline</h1>
   <p><strong><img src="logo/tab-phantom.svg" alt="A tab phantom" width="48" align="middle" /> Lost in the terminal tab maze?</strong></p>
   <p>Give every Codex agent one mission, one terminal, and a place in the grid.</p>
-  <p>
-    <img src="https://img.shields.io/badge/macOS-13%2B%20Support-18181b?style=for-the-badge&amp;logo=apple&amp;logoColor=white" alt="macOS 13+ support" />
-    <a href="#vibe-code-your-terminal-workflow"><img src="https://img.shields.io/badge/Vibe--code-Your%20Workflow-ff3045?style=for-the-badge" alt="Vibe-code your workflow" /></a>
-  </p>
 </div>
 
 <p align="center">
