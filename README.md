@@ -7,7 +7,7 @@
   <img src="logo/Gridline2x.png" alt="Gridline logo" width="160" />
   <h1>Gridline</h1>
   <p><strong><img src="logo/tab-phantom.svg" alt="A tab phantom" width="48" align="middle" /> Lost in the terminal tab maze?</strong></p>
-  <p>Give every Codex agent one mission, one terminal, and a place in the grid.</p>
+  <p>Give every Codex/Claude agent one mission, one terminal, and a place in the grid.</p>
 </div>
 
 <p align="center">
