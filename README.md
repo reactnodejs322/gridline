@@ -27,7 +27,18 @@ That wall of tabs is the problem: every new request adds another place to lose c
 
 ## Vibe-code your terminal workflow
 
-Gridline is open source and made to grow with the way you work. Use the companion **Gridline Debug** inspector to click an interface element, copy its Accessibility details and likely source-code path, then tell your coding assistant what you want changed. Describe the workflow you want; Gridline gives your assistant useful context to start shaping it.
+Gridline is open source and made to grow with the way you work. You can point your coding assistant to the exact part of the interface you mean with the companion **Gridline Debug** inspector:
+
+1. Start Gridline and Gridline Debug with `./start.sh`, then bring the Gridline Debug window forward.
+2. Hover over the control you want changed in Gridline. The inspector highlights the element; click it to pin that selection.
+3. Choose **Copy LLM context** in Gridline Debug. This copies the selected control's details, likely source file, a search command, and relevant app events.
+4. Paste that context into your coding assistant and describe what you want the interface to do. For example: “Move the weekly usage meter into the top status area, shown once for the workspace.”
+
+This lets you identify the target directly instead of describing its location from memory. The inspector reads interface accessibility information; it does not capture terminal text or keystrokes.
+
+<p align="center">
+  <img src="helper.png" alt="Gridline Debug highlights a selected terminal control and copies its LLM context for a coding assistant" width="100%" />
+</p>
 
 When extending Gridline's interface, reuse and extend its existing controls, spacing, colors, and button styles. Add a new component only when the interaction needs one, and keep its appearance consistent with the rest of the workspace.
 
