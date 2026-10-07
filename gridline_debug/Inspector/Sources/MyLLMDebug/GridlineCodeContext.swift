@@ -20,11 +20,23 @@ enum GridlineCodeContext {
         case "gridline.session.newCodex":
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.body toolbar → WorkspaceStore.addSession(kind: .codex)"
         case "gridline.layout.columns":
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.topBar → WorkspaceStore.setColumns(_:)"
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.topBar utility menu → WorkspaceStore.setColumns(_:)"
+        case "gridline.workgroups.expandAll", "gridline.workgroups.collapseAll":
+            return "gridline/Sources/Gridline/GridlineApp.swift → macOS Gridline app menu → WorkspaceStore.expandAllWorkgroups() / collapseAllWorkgroups(); per-workgroup collapsed state persists in workspace.json."
+        case "gridline.workspace.utilityMenu":
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.topBar → shared palette-aware workspace dropdown; panel and action-row styling are in gridline/template/main_template/MainTemplateDropdownPanel.swift."
+        case "gridline.workspace.tokenUsage":
+            return "gridline/template/main_template/MainTemplateUsageStatusView.swift renders the visible meter and opens refresh settings when clicked. The persistent Codex allowance monitor and refresh preferences are in gridline/Sources/Gridline/ProviderUsageService.swift; the stream reader is gridline/usage/monitor.py."
+        case "gridline.workspace.usageRefresh.auto", "gridline.workspace.usageRefresh.interval", "gridline.workspace.usageRefresh.intervalEditor":
+            return "gridline/template/main_template/MainTemplateUsageStatusView.swift → ChatGPT meter settings popover; refresh process and persisted settings are in gridline/Sources/Gridline/ProviderUsageService.swift."
+        case "gridline.workspace.defaultDirectorySummary":
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.topBar current default folder summary; open Workspace controls → Directory command to run cd, pwd, or ls."
         case "gridline.workspace.title":
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.body workspace header. The inline `cd` prompt in this row controls Gridline's default starting folder."
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView compact workspace controls. The directory command popover controls Gridline's default starting folder."
         case "gridline.workspace.directoryCommand", "gridline.workspace.defaultDirectory":
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.runDirectoryCommand() → WorkspaceStore.runDirectoryCommand(_:); supports cd, pwd, and ls, saves the default folder, and renders an organized directory listing."
+        case let id where id.hasPrefix("gridline.template."):
+            return "gridline/template/TemplateCatalog.swift → GridlineTemplateCatalog and shared work-group context; gridline/template/main_template/ → skin palette and work-group/terminal views. Actions and saved session data remain in WorkspaceStore and TerminalSession in gridline/Sources/Gridline/Workspace.swift."
         case "gridline.skillScript.menu", "gridline.skillScript.dropdown", "gridline.skillScript.audioToText",
              "gridline.skillScript.transcriptionModal", "gridline.skillScript.transcriptionLoading",
              "gridline.skillScript.transcript", "gridline.skillScript.transcriptStats",
@@ -32,7 +44,7 @@ enum GridlineCodeContext {
              "gridline.skillScript.pauseMode", "gridline.skillScript.startTranscription",
              "gridline.skillScript.copyTranscript", "gridline.skillScript.saveTranscript",
              "gridline.skillScript.closeTranscript", "gridline.skillScript.transcriptionError":
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView custom skill_script dropdown → AudioTranscriptionOutputView; the Audio to text skill and helpers are in skill_script/audio_to_text/, with model assets in skill_script/resources/models/."
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView skill-script dropdown, rendered with gridline/template/main_template/MainTemplateDropdownPanel.swift → AudioTranscriptionOutputView; the Audio to text skill and helpers are in skill_script/audio_to_text/, with model assets in skill_script/resources/models/."
         case "gridline.skillScript.voiceTodo", "gridline.workspace.tab.voiceTodo", "gridline.workspace.tab.workspace",
              "gridline.voiceTodo.open", "gridline.voiceTodo.modal", "gridline.voiceTodo.start",
              "gridline.voiceTodo.endProblem", "gridline.voiceTodo.stop", "gridline.voiceTodo.input",
@@ -42,39 +54,39 @@ enum GridlineCodeContext {
         case "gridline.workspace.groupSidebar.panel":
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.body → left work-group navigation overlay. It scrolls the main grid to a group; it does not close or restart terminals."
         case "gridline.workspace.groupSidebar":
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.body hamburger button; toggles the left navigation overlay without changing terminal sessions."
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.topBar utility menu → hamburger item; toggles the left navigation overlay without changing terminal sessions."
         case let id where id.hasPrefix("gridline.workspace.groupSidebar.item."):
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.body work-group sidebar item; scrolls to the matching group and briefly highlights its card."
         case let id where id.hasPrefix("gridline.group.toggle."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) → WorkspaceStore.toggle(_:)"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → group header toggle → WorkspaceStore.toggle(_:)"
         case let id where id.hasPrefix("gridline.group.header."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) header HStack; this is the full gray work-group header region. Its child controls and work-group title have their own identifiers."
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → main-skin work-group header. Its child controls and work-group title have their own identifiers."
         case let id where id.hasPrefix("gridline.group.card."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) full work-group card container. Prefer a child identifier when the target is a specific button or terminal."
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → MainTemplateWorkGroupCard full main-skin work-group card. Prefer a child identifier when the target is a specific button or terminal."
         case let id where id.hasPrefix("gridline.group.close."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) header close button → WorkspaceStore.closeGroup(_:); terminates the group's terminal sessions and removes the work-group cell."
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → work-group header close button → WorkspaceStore.closeGroup(_:); terminates the group's terminal sessions and removes the work-group cell."
         case let id where id.hasPrefix("gridline.group.name."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) → WorkspaceStore.renameGroup(_:to:) (double-click the name, then press Return)"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → work-group name and inline editor → WorkspaceStore.renameGroup(_:to:) (double-click the name, then press Return)"
         case let id where id.hasPrefix("gridline.group.addCodex."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) menu → WorkspaceStore.addSession(to:kind:) with .codex"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → work-group menu → WorkspaceStore.addSession(to:kind:) with .codex"
         case let id where id.hasPrefix("gridline.group.addSession."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) menu container; starts a Codex terminal only when the work group has no terminal, and always offers project-folder selection."
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → work-group menu container; starts a Codex terminal only when the work group has no terminal, and always offers project-folder selection."
         case let id where id.hasPrefix("gridline.group.folder."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) → WorkspaceStore.chooseDirectory(for:)"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → project folder control → WorkspaceStore.chooseDirectory(for:)"
         case let id where id.hasPrefix("gridline.group.startCodex."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) empty state → WorkspaceStore.addSession(to:kind:) with .codex"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → empty work-group state → WorkspaceStore.addSession(to:kind:) with .codex"
         case let id where id.hasPrefix("gridline.session.label."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.sessionCard(_:) → TerminalSession.rename(_:) (double-click the label, then press Return)"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → MainTemplateTerminalCard label and inline editor → TerminalSession.rename(_:) (double-click the label, then press Return)"
         case let id where id.hasPrefix("gridline.session.zoomIn.") || id.hasPrefix("gridline.session.zoomOut."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.sessionCard(_:) → TerminalSession.zoomIn()/zoomOut(); saves the selected terminal's font size in workspace.json"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → MainTemplateTerminalCard → TerminalSession.zoomIn()/zoomOut(); saves the selected terminal's font size in workspace.json"
         case let id where id.hasPrefix("gridline.session.fontSize."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.sessionCard(_:) font size display; per-session size is persisted with SavedSession"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → MainTemplateTerminalCard font size display; per-session size is persisted with SavedSession"
         case let id where id.hasPrefix("gridline.session.resizeHeight."):
-            return "gridline/Sources/Gridline/Workspace.swift → TerminalHeightResizeHandle → WorkspaceStore.resizeTerminal(_:to:save:); saves this terminal's height in workspace.json"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → MainTemplateTerminalCard → TerminalHeightResizeHandle in gridline/Sources/Gridline/Workspace.swift → WorkspaceStore.resizeTerminal(_:to:save:); saves this terminal's height in workspace.json"
         case let id where id.hasPrefix("gridline.session.terminal."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.sessionCard(_:) → TerminalPane(session:) → TerminalSession.init(saved:directory:) starts SwiftTerm's LocalProcessTerminalView and launches /bin/zsh; Codex sessions send `codex` to that shell."
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → MainTemplateTerminalCard → TerminalPane(session:) in gridline/Sources/Gridline/Workspace.swift → TerminalSession.init(saved:directory:) starts SwiftTerm's LocalProcessTerminalView and launches /bin/zsh; Codex sessions send `codex` to that shell."
         case let id where id.hasPrefix("gridline.session.close."):
-            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.sessionCard(_:) → WorkspaceStore.close(_:)"
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → MainTemplateTerminalCard close control → WorkspaceStore.close(_:)"
         default:
             return "Search gridline/Sources/Gridline/Workspace.swift and gridline/Sources/Gridline/DebugEvents.swift for the Accessibility identifier or visible title. The Accessibility hierarchy identifies the runtime control, not a guaranteed source line."
         }
@@ -82,11 +94,17 @@ enum GridlineCodeContext {
 
     static func expectedEvents(for identifier: String) -> String {
         switch identifier {
+        case let id where id.hasPrefix("gridline.template.active."): return "No direct action; this container identifies the currently active template skin."
+        case "gridline.template.selector": return "Container only; choose a template option."
+        case let id where id.hasPrefix("gridline.template.option."): return "template.selected"
         case "gridline.group.new": return "workgroup.created; terminal.started"
         case "gridline.session.newCodex": return "session.created; terminal.started"
         case "gridline.layout.columns": return "layout.columnsChanged"
         case "gridline.workspace.directoryCommand", "gridline.workspace.defaultDirectory": return "workspace.defaultDirectoryChanged; workspace.directoryPrinted; workspace.directoryListed; workspace.directorySelected"
         case "gridline.workspace.groupSidebar": return "workspace.groupSidebarToggled"
+        case "gridline.workspace.usageRefresh.auto", "gridline.workspace.usageRefresh.interval", "gridline.workspace.usageRefresh.intervalEditor": return "No semantic event; refresh settings are saved in Gridline UserDefaults."
+        case "gridline.workgroups.expandAll": return "workgroups.expandedAll"
+        case "gridline.workgroups.collapseAll": return "workgroups.collapsedAll"
         case let id where id.hasPrefix("gridline.workspace.groupSidebar.item."): return "workgroup.sidebarSelected"
         case "gridline.workspace.groupSidebar.panel": return "No direct action; selecting a child group row scrolls the main workspace."
         case "gridline.workspace.title": return "No direct action; use the directory command field."
@@ -128,11 +146,24 @@ enum GridlineCodeContext {
 
     private static func actionSummary(for identifier: String, title: String) -> String {
         switch identifier {
+        case let id where id.hasPrefix("gridline.template.active."):
+            let name = String(id.dropFirst("gridline.template.active.".count)).replacingOccurrences(of: "_", with: " ")
+            return "Active Gridline skin: \(name). This container exposes the current template and its shared workflow controls to Gridline Debug."
+        case "gridline.template.selector": return "Open the available Gridline visual skins. Template changes preserve shared workflow behavior."
+        case let id where id.hasPrefix("gridline.template.option."):
+            let name = String(id.dropFirst("gridline.template.option.".count)).replacingOccurrences(of: "_", with: " ")
+            return "Select the \(name) Gridline skin. Shared workflow actions stay the same."
         case "gridline.group.new": return "Create a work group."
         case "gridline.session.newCodex": return "Create a new Codex terminal session."
         case "gridline.layout.columns": return "Change the workspace grid column count."
-        case "gridline.workspace.title": return "Workspace header. Use the inline cd prompt in this row to set the default starting folder."
-        case "gridline.skillScript.menu": return "Open Gridline's custom, workspace-styled list of text-extraction scripts."
+        case "gridline.workspace.title": return "Open Workspace controls to change the default starting folder or access workspace actions."
+        case "gridline.workspace.utilityMenu": return "Open compact workspace actions, including workgroup navigation, directory commands, skill scripts, and grid layout."
+        case "gridline.workspace.tokenUsage": return "Visible ChatGPT weekly allowance bar and dollar plan-value estimate; click this same visible section to adjust the persistent fetch interval or disable automatic fetching. Claude's meter appears while a Claude terminal is active."
+        case "gridline.workspace.usageRefresh.auto": return "Enable or disable continuous ChatGPT allowance fetching; the saved interval remains unchanged."
+        case "gridline.workspace.usageRefresh.interval": return "Choose a saved preset refresh interval for ChatGPT allowance fetching."
+        case "gridline.workspace.usageRefresh.intervalEditor": return "Set a custom ChatGPT allowance refresh interval in milliseconds, seconds, or minutes."
+        case "gridline.workspace.defaultDirectorySummary": return "Current default folder used for new workgroups and sessions."
+        case "gridline.skillScript.menu": return "Open Gridline's skill-script options from the compact workspace controls."
         case "gridline.skillScript.dropdown": return "Custom skill-script dropdown panel."
         case "gridline.skillScript.audioToText": return "Open the file selector and run local Whisper transcription plus speaker diarization for copyable text."
         case "gridline.skillScript.transcriptionOptions": return "Choose speaker labels or a faster transcript with paragraph breaks after pauses."
@@ -152,13 +183,15 @@ enum GridlineCodeContext {
         case "gridline.workspace.groupSidebar": return "Show or hide the work-group navigation overlay. Terminal sessions keep running."
         case "gridline.workspace.groupSidebar.panel": return "Left-side work-group navigation overlay. It does not resize the grid or stop terminal sessions."
         case let id where id.hasPrefix("gridline.workspace.groupSidebar.item."): return "Scroll the workspace to this work group and highlight it briefly."
-        case let id where id.hasPrefix("gridline.group.toggle."): return "Collapse or expand this work group."
+        case let id where id.hasPrefix("gridline.group.toggle."): return "One-click header chevron collapses or expands the entire work-group tile and its terminal."
+        case "gridline.workgroups.expandAll": return "Expand every work group to show its terminal. Individual group states remain saved when toggled afterward."
+        case "gridline.workgroups.collapseAll": return "Collapse every work group. Individual group states remain saved when toggled afterward."
         case let id where id.hasPrefix("gridline.group.close."): return "Close this work group and terminate all terminal sessions inside it."
         case let id where id.hasPrefix("gridline.group.header."): return "Work-group header area; identify a child control for its specific action."
         case let id where id.hasPrefix("gridline.group.card."): return "Work-group card container; identify a child control for its specific action."
         case let id where id.hasPrefix("gridline.group.name."): return "Rename this work group."
         case let id where id.hasPrefix("gridline.group.addCodex."): return "Add a Codex terminal to this work group."
-        case let id where id.hasPrefix("gridline.group.addSession."): return "Open the menu for adding a terminal to this work group."
+        case let id where id.hasPrefix("gridline.group.addSession."): return "Open the shared-style work-group actions dropdown."
         case let id where id.hasPrefix("gridline.group.folder."): return "Choose or change this work group's project folder."
         case let id where id.hasPrefix("gridline.group.startCodex."): return "Start a Codex terminal in this work group."
         case let id where id.hasPrefix("gridline.session.label."): return "Rename this terminal session."
@@ -182,13 +215,12 @@ enum GridlineCodeContext {
         let rawIdentifier = canonicalIdentifier(for: element)
         let canonicalID = inferredActionIdentifier(rawIdentifier, events: recentEvents, clickTime: click?.time)
         let hierarchyHint = element.hierarchy.last(where: { $0.contains("gridline.") }) ?? element.role
-        let searchTerm = canonicalID.hasPrefix("gridline.group.close.")
-            ? "closeGroup"
-            : canonicalID != rawIdentifier
-            ? canonicalID
-            : element.identifier.isEmpty
-            ? (element.title.isEmpty ? (canonicalID.isEmpty ? hierarchyHint : canonicalID) : element.title)
-            : element.identifier
+        let searchTerm = searchTerm(
+            canonicalID: canonicalID,
+            rawIdentifier: rawIdentifier,
+            element: element,
+            hierarchyHint: hierarchyHint
+        )
         let expected = expectedEvents(for: canonicalID)
         let quotedProjectRoot = "'" + projectRoot.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
         let matchingEvents = relevantEvents(
@@ -239,6 +271,8 @@ enum GridlineCodeContext {
     }
 
     private static func eventNames(for identifier: String) -> Set<String> {
+        if identifier.hasPrefix("gridline.template.active.") || identifier == "gridline.template.selector" { return [] }
+        if identifier.hasPrefix("gridline.template.option.") { return ["template.selected"] }
         if identifier.hasPrefix("gridline.session.terminal.") { return ["terminal.started", "terminal.exit"] }
         return Set(expectedEvents(for: identifier).split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) })
     }
@@ -317,5 +351,32 @@ enum GridlineCodeContext {
         case "terminal workspace": return "gridline.workspace.title"
         default: return ""
         }
+    }
+
+    private static func searchTerm(
+        canonicalID: String,
+        rawIdentifier: String,
+        element: DebugElement,
+        hierarchyHint: String
+    ) -> String {
+        if canonicalID.hasPrefix("gridline.template.") { return "GridlineTemplate" }
+        if canonicalID.hasPrefix("gridline.group.close.") { return "closeGroup" }
+
+        let workGroupPrefixes = [
+            "gridline.group.card.", "gridline.group.header.", "gridline.group.toggle.",
+            "gridline.group.name.", "gridline.group.addCodex.", "gridline.group.addSession.",
+            "gridline.group.folder.", "gridline.group.startCodex."
+        ]
+        if workGroupPrefixes.contains(where: canonicalID.hasPrefix) { return "MainTemplateWorkGroupCard" }
+
+        let terminalPrefixes = [
+            "gridline.session.label.", "gridline.session.zoom", "gridline.session.fontSize.",
+            "gridline.session.resizeHeight.", "gridline.session.close."
+        ]
+        if terminalPrefixes.contains(where: canonicalID.hasPrefix) { return "MainTemplateTerminalCard" }
+        if canonicalID != rawIdentifier { return canonicalID }
+        if !element.identifier.isEmpty { return element.identifier }
+        if !element.title.isEmpty { return element.title }
+        return canonicalID.isEmpty ? hierarchyHint : canonicalID
     }
 }

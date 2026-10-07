@@ -60,8 +60,8 @@ final class InspectorStore: ObservableObject {
     }
 
     func openAccessibilitySettings() {
-        let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        if !NSWorkspace.shared.open(settingsURL),
+        if let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"),
+           !NSWorkspace.shared.open(settingsURL),
            let fallback = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension") {
             NSWorkspace.shared.open(fallback)
         }

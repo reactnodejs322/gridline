@@ -77,9 +77,10 @@ open_apps() {
 
 fingerprint() {
   {
-    find "$ROOT/gridline/Sources" "$ROOT/gridline_debug/Inspector/Sources" "$ROOT/gridline/tools" -type f -name '*.swift' -exec stat -f '%m %N' {} \; 2>/dev/null
+    find "$ROOT/gridline/Sources" "$ROOT/gridline/template" "$ROOT/gridline_debug/Inspector/Sources" "$ROOT/gridline/tools" -type f -name '*.swift' -exec stat -f '%m %N' {} \; 2>/dev/null
     find "$ROOT/skill_script" -type f ! -path '*/resources/models/*' -exec stat -f '%m %N' {} \; 2>/dev/null
-    stat -f '%m %N' "$ROOT/logo/Gridline2x.png" "$ROOT/gridline/build-app-icon.sh" "$ROOT/gridline/build-app.sh" "$ROOT/gridline_debug/build-inspector.sh" "$ROOT/VERSION" 2>/dev/null
+    find "$ROOT/gridline/usage" -type f -name '*.py' -exec stat -f '%m %N' {} \; 2>/dev/null
+    stat -f '%m %N' "$ROOT/logo/Gridline2x.png" "$ROOT/gridline/Package.swift" "$ROOT/gridline/build-app-icon.sh" "$ROOT/gridline/build-app.sh" "$ROOT/gridline_debug/build-inspector.sh" "$ROOT/VERSION" 2>/dev/null
   } | sort | shasum -a 256 | cut -d ' ' -f 1
 }
 

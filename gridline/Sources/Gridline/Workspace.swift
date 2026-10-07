@@ -259,7 +259,7 @@ final class TerminalSession: NSObject, ObservableObject, Identifiable, LocalProc
 final class WorkspaceStore: ObservableObject {
     @Published var groups: [SavedGroup] = []
     @Published private(set) var sessions: [TerminalSession] = []
-    @Published var columns = 2
+    @Published var columns = 3
     @Published private(set) var defaultDirectory = NSHomeDirectory()
     private let saveURL: URL
 
@@ -450,6 +450,25 @@ final class WorkspaceStore: ObservableObject {
         changed()
     }
 
+    func expandAllWorkgroups() {
+        setAllWorkgroups(collapsed: false)
+    }
+
+    func collapseAllWorkgroups() {
+        setAllWorkgroups(collapsed: true)
+    }
+
+    private func setAllWorkgroups(collapsed: Bool) {
+        guard !groups.isEmpty, groups.contains(where: { $0.isCollapsed != collapsed }) else { return }
+        for index in groups.indices {
+            groups[index].isCollapsed = collapsed
+        }
+        let event = collapsed ? "workgroups.collapsedAll" : "workgroups.expandedAll"
+        let element = collapsed ? "gridline.workgroups.collapseAll" : "gridline.workgroups.expandAll"
+        DebugEvents.record(event, element: element, details: ["count": String(groups.count)])
+        changed()
+    }
+
     func renameGroup(_ group: SavedGroup, to name: String) {
         guard let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -564,7 +583,7 @@ struct TerminalPane: NSViewRepresentable {
     }
 }
 
-private struct TerminalHeightResizeHandle: View {
+struct TerminalHeightResizeHandle: View {
     let sessionID: UUID
     let height: CGFloat
     let onResize: (CGFloat, Bool) -> Void
@@ -613,8 +632,11 @@ private struct TerminalHeightResizeHandle: View {
 
 struct WorkspaceView: View {
     @EnvironmentObject private var workspace: WorkspaceStore
+    @EnvironmentObject private var templateStore: GridlineTemplateStore
     @StateObject private var audioTranscription = AudioTranscriptionModel()
     @StateObject private var voiceTodo = VoiceTodoModel()
+    @StateObject private var codexUsage = CodexUsageStatus()
+    @StateObject private var providerUsage = ProviderUsageStatus()
     @State private var editingGroup: UUID?
     @State private var groupDraft = ""
     @State private var editingSession: UUID?
@@ -622,134 +644,30 @@ struct WorkspaceView: View {
     @State private var directoryCommand = ""
     @State private var commandOutput: WorkspaceCommandOutput?
     @State private var directoryBarWidth: CGFloat = 0
+    @State private var showingDirectoryPrompt = false
     @State private var isGroupSidebarExpanded = false
+    @State private var isWorkspaceActionsExpanded = false
     @State private var highlightedGroup: UUID?
     @State private var showingSkillScriptOutput = false
     @State private var isSkillScriptDropdownExpanded = false
     @State private var selectedAppTab = "workspace"
     @State private var showingVoiceTodo = false
 
-    private let background = Color(red: 0.055, green: 0.06, blue: 0.07)
+    private var template: GridlineTemplate { templateStore.activeTemplate }
 
     var body: some View {
         VStack(spacing: 0) {
             topBar
             if selectedAppTab == "workspace" {
-            HStack(spacing: 9) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { isGroupSidebarExpanded.toggle() }
-                    DebugEvents.record("workspace.groupSidebarToggled", element: "gridline.workspace.groupSidebar", details: ["expanded": String(!isGroupSidebarExpanded)])
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(isGroupSidebarExpanded ? Color.mint : Color.secondary)
-                        .frame(width: 28, height: 26)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(isGroupSidebarExpanded ? "Hide work group list" : "Show work group list")
-                .accessibilityLabel(isGroupSidebarExpanded ? "Hide work group list" : "Show work group list")
-                .accessibilityIdentifier("gridline.workspace.groupSidebar")
-                Image(systemName: "square.grid.2x2.fill").foregroundStyle(Color.mint)
-                Text("Terminal workspace").font(.system(size: 12, weight: .medium))
-                    .accessibilityIdentifier("gridline.workspace.title")
-                Text("·").foregroundStyle(.secondary)
-                Text("\(workspace.groups.count) work groups").foregroundStyle(.secondary)
-                HStack(spacing: 7) {
-                    Text("$").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(Color.mint)
-                    DirectoryCommandField(
-                        text: $directoryCommand,
-                        placeholder: workspace.defaultDirectory,
-                        onSubmit: runDirectoryCommand,
-                        onTab: completeDirectoryCommand
-                    )
-                        .frame(maxWidth: .infinity)
-                        .help("Current folder: \(workspace.defaultDirectory). Enter cd <path>, pwd, or ls.")
-                        .accessibilityLabel("Directory command. Current folder: \(workspace.defaultDirectory). Supported commands: cd, pwd, ls")
-                        .accessibilityIdentifier("gridline.workspace.directoryCommand")
-                }
-                .padding(.horizontal, 9)
-                .frame(height: 29)
-                .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.1), lineWidth: 1))
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("gridline.workspace.defaultDirectory")
-                .frame(maxWidth: .infinity)
-                .popover(item: $commandOutput, attachmentAnchor: .rect(.bounds), arrowEdge: .top) { output in
-                    WorkspaceCommandOutputView(output: output, width: directoryBarWidth) { completion in
-                        selectDirectoryCompletion(completion)
-                    }
-                }
-                .background {
-                    GeometryReader { geometry in
-                        Color.clear
-                            .onAppear { directoryBarWidth = geometry.size.width }
-                            .onChange(of: geometry.size.width) { newWidth in directoryBarWidth = newWidth }
-                    }
-                }
-                Spacer(minLength: 8)
-                Button { workspace.addGroup() } label: { Label("New work group", systemImage: "plus") }
-                    .buttonStyle(.bordered).accessibilityIdentifier("gridline.group.new")
-                Button {
-                    withAnimation(.easeOut(duration: 0.16)) {
-                        isSkillScriptDropdownExpanded.toggle()
-                    }
-                    DebugEvents.record("skillScript.menuToggled", element: "gridline.skillScript.menu", details: [
-                        "expanded": String(isSkillScriptDropdownExpanded)
-                    ])
-                } label: {
-                    HStack(spacing: 7) {
-                        Label("skill_script", systemImage: "text.magnifyingglass")
-                        Image(systemName: isSkillScriptDropdownExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(height: 29)
-                    .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(
-                        isSkillScriptDropdownExpanded ? Color.mint.opacity(0.5) : Color.white.opacity(0.1),
-                        lineWidth: 1
-                    ))
-                }
-                .buttonStyle(.plain)
-                .help("Run a skill script that extracts text for an LLM")
-                .accessibilityIdentifier("gridline.skillScript.menu")
-                .overlay(alignment: .topTrailing) {
-                    if isSkillScriptDropdownExpanded {
-                        SkillScriptDropdownView(onAudioToText: {
-                            withAnimation(.easeOut(duration: 0.16)) {
-                                isSkillScriptDropdownExpanded = false
-                            }
-                            DebugEvents.record("skillScript.selected", element: "gridline.skillScript.audioToText")
-                            chooseAudioForTranscription()
-                        }, onVoiceTodo: {
-                            withAnimation(.easeOut(duration: 0.16)) { isSkillScriptDropdownExpanded = false }
-                            selectedAppTab = "voiceTodo"
-                            showingVoiceTodo = true
-                            DebugEvents.record("skillScript.selected", element: "gridline.skillScript.voiceTodo")
-                        })
-                        .frame(width: 248)
-                        .offset(y: 37)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                        .zIndex(30)
-                    }
-                }
-                .zIndex(isSkillScriptDropdownExpanded ? 30 : 0)
-            }
-            .font(.system(size: 12))
-            .padding(.horizontal, 22).padding(.vertical, 13)
-            .zIndex(isSkillScriptDropdownExpanded ? 20 : 0)
-            Divider().overlay(Color.white.opacity(0.08))
             ScrollViewReader { proxy in
                 ZStack(alignment: .leading) {
                     ScrollView {
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: workspace.columns), alignment: .leading, spacing: 14) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: workspace.columns), alignment: .leading, spacing: 8) {
                             ForEach(workspace.groups) { group in
                                 groupCard(group)
                                     .id(group.id)
                                     .overlay {
-                                        RoundedRectangle(cornerRadius: 10)
+                                        RoundedRectangle(cornerRadius: 5)
                                             .stroke(Color.cyan.opacity(highlightedGroup == group.id ? 0.95 : 0), lineWidth: 2)
                                             .shadow(color: Color.cyan.opacity(highlightedGroup == group.id ? 0.55 : 0), radius: 8)
                                             .animation(.easeInOut(duration: 0.8), value: highlightedGroup)
@@ -757,7 +675,7 @@ struct WorkspaceView: View {
                                     }
                             }
                         }
-                        .padding(20)
+                        .padding(10)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -824,8 +742,12 @@ struct WorkspaceView: View {
                 voiceTodoLanding
             }
         }
-        .background(background)
-        .foregroundStyle(Color(red: 0.9, green: 0.91, blue: 0.92))
+        .background(template.palette.canvas)
+        .onAppear { providerUsage.updateTerminals(workspace.sessions) }
+        .onChange(of: workspace.sessions.map(\.id)) { _ in
+            providerUsage.updateTerminals(workspace.sessions)
+        }
+        .foregroundStyle(template.palette.primaryText)
         .overlay {
             if showingSkillScriptOutput {
                 AudioTranscriptionOutputView(
@@ -845,6 +767,9 @@ struct WorkspaceView: View {
                 .zIndex(110)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Gridline template: \(template.id)")
+        .accessibilityIdentifier("gridline.template.active.\(template.id)")
     }
 
     private func runDirectoryCommand() {
@@ -883,61 +808,188 @@ struct WorkspaceView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 12) {
-            Group {
-                if let logoURL = Bundle.main.url(forResource: "Gridline2x", withExtension: "png"),
-                   let logo = NSImage(contentsOf: logoURL) {
-                    Image(nsImage: logo)
-                        .resizable()
-                        .scaledToFit()
-                } else {
-                    Image(systemName: "command")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color.mint)
+        HStack(spacing: 0) {
+            HStack(spacing: 5) {
+                Image(systemName: "folder")
+                    .font(.system(size: 9))
+                    .foregroundStyle(template.palette.accent)
+                Text(workspace.defaultDirectory == NSHomeDirectory() ? "~" : workspace.defaultDirectory)
+                    .font(.system(size: 9, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(.secondary)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityIdentifier("gridline.workspace.defaultDirectorySummary")
+            template.makeUsageStatusView(providerUsage.snapshot, codexUsage)
+                .padding(.leading, 6)
+            Spacer()
+            Button { isWorkspaceActionsExpanded.toggle() } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 30, height: 25)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Workspace controls")
+            .accessibilityLabel("Workspace controls")
+            .accessibilityIdentifier("gridline.workspace.utilityMenu")
+            .popover(isPresented: $isWorkspaceActionsExpanded, arrowEdge: .top) {
+                MainTemplateDropdownPanel(title: "WORKSPACE CONTROLS", palette: template.palette, width: 260) {
+                    MainTemplateDropdownActionRow(
+                        title: isGroupSidebarExpanded ? "Hide work groups" : "Show work groups",
+                        systemImage: "line.3.horizontal",
+                        tint: template.palette.accent,
+                        identifier: "gridline.workspace.groupSidebar"
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.2)) { isGroupSidebarExpanded.toggle() }
+                        DebugEvents.record("workspace.groupSidebarToggled", element: "gridline.workspace.groupSidebar", details: ["expanded": String(!isGroupSidebarExpanded)])
+                        isWorkspaceActionsExpanded = false
+                    }
+
+                    MainTemplateDropdownActionRow(
+                        title: "Directory command…",
+                        subtitle: "Change or inspect the default folder",
+                        systemImage: "folder",
+                        tint: template.palette.accent,
+                        identifier: "gridline.workspace.directoryCommand"
+                    ) {
+                        isWorkspaceActionsExpanded = false
+                        showingDirectoryPrompt = true
+                    }
+
+                    MainTemplateDropdownActionRow(
+                        title: "New work group",
+                        subtitle: "Add a terminal tile to the grid",
+                        systemImage: "plus",
+                        tint: template.palette.accent,
+                        identifier: "gridline.group.new"
+                    ) {
+                        isWorkspaceActionsExpanded = false
+                        workspace.addGroup()
+                    }
+
+                    Divider().overlay(template.palette.border)
+
+                    MainTemplateDropdownActionRow(
+                        title: "Workspace",
+                        systemImage: "square.grid.2x2",
+                        tint: template.palette.accent,
+                        identifier: "gridline.workspace.tab.workspace"
+                    ) {
+                        selectedAppTab = "workspace"
+                        isWorkspaceActionsExpanded = false
+                        DebugEvents.record("workspace.tabSelected", element: "gridline.workspace.tab.workspace")
+                    }
+
+                    MainTemplateDropdownActionRow(
+                        title: "Voice todo",
+                        systemImage: "waveform",
+                        tint: template.palette.accent,
+                        identifier: "gridline.workspace.tab.voiceTodo"
+                    ) {
+                        selectedAppTab = "voiceTodo"
+                        isWorkspaceActionsExpanded = false
+                        DebugEvents.record("voiceTodo.tabSelected", element: "gridline.workspace.tab.voiceTodo")
+                    }
+
+                    MainTemplateDropdownActionRow(
+                        title: "Skill scripts…",
+                        systemImage: "text.magnifyingglass",
+                        tint: template.palette.accent,
+                        identifier: "gridline.skillScript.menu"
+                    ) {
+                        isWorkspaceActionsExpanded = false
+                        isSkillScriptDropdownExpanded = true
+                        DebugEvents.record("skillScript.menuToggled", element: "gridline.skillScript.menu", details: ["expanded": "true"])
+                    }
+
+                    Divider().overlay(template.palette.border)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("GRID COLUMNS")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .tracking(0.8)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                        HStack(spacing: 6) {
+                            ForEach([1, 2, 3], id: \.self) { count in
+                                Button {
+                                    workspace.setColumns(count)
+                                    isWorkspaceActionsExpanded = false
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        if workspace.columns == count { Image(systemName: "checkmark") }
+                                        Text("\(count)")
+                                    }
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 7)
+                                    .background(template.palette.controlSurface, in: RoundedRectangle(cornerRadius: 6))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(count) grid column\(count == 1 ? "" : "s")")
+                                .accessibilityIdentifier("gridline.layout.columns.option.\(count)")
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("gridline.layout.columns")
                 }
             }
-            .frame(width: 30, height: 30)
-            .accessibilityLabel("Gridline logo")
-            .accessibilityIdentifier("gridline.workspace.brandLogo")
-            Text("GRIDLINE").font(.system(size: 11, weight: .bold, design: .rounded)).tracking(1.2)
-            Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 19).padding(.horizontal, 3)
-            Text("myllm").font(.system(size: 12, weight: .medium))
-            Text("/  local Codex workspace").font(.system(size: 11)).foregroundStyle(.secondary)
-            HStack(spacing: 4) {
-                appTab("Workspace", id: "workspace", icon: "square.grid.2x2")
-                appTab("Voice todo", id: "voiceTodo", icon: "waveform")
+            .popover(isPresented: $showingDirectoryPrompt, arrowEdge: .top) {
+                directoryCommandPopover
             }
-            .padding(.leading, 12)
-            Spacer()
-            Circle().fill(Color.green).frame(width: 7, height: 7)
-            Text("Local machine").font(.system(size: 10)).foregroundStyle(.secondary)
-            Menu {
-                Button("Two columns") { workspace.setColumns(2) }
-                Button("Three columns") { workspace.setColumns(3) }
-                Button("One column") { workspace.setColumns(1) }
-            } label: { Image(systemName: "rectangle.split.3x1").frame(width: 30, height: 25) }
-                .menuStyle(.borderlessButton).help("Change grid layout")
-                .accessibilityIdentifier("gridline.layout.columns")
+            .popover(isPresented: $isSkillScriptDropdownExpanded, arrowEdge: .top) {
+                SkillScriptDropdownView(onAudioToText: {
+                    isSkillScriptDropdownExpanded = false
+                    DebugEvents.record("skillScript.selected", element: "gridline.skillScript.audioToText")
+                    chooseAudioForTranscription()
+                }, onVoiceTodo: {
+                    isSkillScriptDropdownExpanded = false
+                    selectedAppTab = "voiceTodo"
+                    showingVoiceTodo = true
+                    DebugEvents.record("skillScript.selected", element: "gridline.skillScript.voiceTodo")
+                })
+                .frame(width: 248)
+            }
         }
-        .padding(.horizontal, 18).frame(height: 48)
-        .background(Color(red: 0.075, green: 0.08, blue: 0.09))
-        .overlay(alignment: .bottom) { Divider().overlay(Color.white.opacity(0.08)) }
+        .padding(.horizontal, 12).frame(height: 32)
+        .background(template.palette.toolbar.opacity(0.35))
     }
 
-    private func appTab(_ title: String, id: String, icon: String) -> some View {
-        Button {
-            selectedAppTab = id
-            if id == "voiceTodo" { DebugEvents.record("voiceTodo.tabSelected", element: "gridline.workspace.tab.voiceTodo") }
-            else { DebugEvents.record("workspace.tabSelected", element: "gridline.workspace.tab.workspace") }
-        } label: {
-            Label(title, systemImage: icon)
-                .font(.system(size: 10, weight: .medium))
-                .padding(.horizontal, 10).frame(height: 27)
-                .background(selectedAppTab == id ? Color.white.opacity(0.09) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-                .foregroundStyle(selectedAppTab == id ? Color.white : Color.secondary)
+    private var directoryCommandPopover: some View {
+        MainTemplateDropdownPanel(title: "DEFAULT FOLDER", palette: template.palette, width: 360) {
+            HStack(spacing: 7) {
+                Text("$").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(template.palette.accent)
+                DirectoryCommandField(
+                    text: $directoryCommand,
+                    placeholder: workspace.defaultDirectory,
+                    onSubmit: runDirectoryCommand,
+                    onTab: completeDirectoryCommand
+                )
+                .frame(maxWidth: .infinity)
+                .help("Enter cd <path>, pwd, or ls.")
+                .accessibilityLabel("Directory command. Current folder: \(workspace.defaultDirectory). Supported commands: cd, pwd, ls")
+                .accessibilityIdentifier("gridline.workspace.directoryCommand")
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 32)
+            .background(template.palette.controlSurface, in: RoundedRectangle(cornerRadius: 5))
+            .overlay(RoundedRectangle(cornerRadius: 5).stroke(template.palette.border, lineWidth: 1))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("gridline.workspace.defaultDirectory")
+            .popover(item: $commandOutput, attachmentAnchor: .rect(.bounds), arrowEdge: .top) { output in
+                WorkspaceCommandOutputView(output: output, width: directoryBarWidth) { completion in
+                    selectDirectoryCompletion(completion)
+                }
+            }
+            .background {
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear { directoryBarWidth = geometry.size.width }
+                        .onChange(of: geometry.size.width) { directoryBarWidth = $0 }
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("gridline.workspace.tab.\(id)")
     }
 
     private var voiceTodoLanding: some View {
@@ -960,145 +1012,16 @@ struct WorkspaceView: View {
     }
 
     private func groupCard(_ group: SavedGroup) -> some View {
-        let groupSessions = workspace.groupSessions(group)
-        return VStack(spacing: 0) {
-            HStack(spacing: 9) {
-                Button { workspace.toggle(group) } label: {
-                    Image(systemName: group.isCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary).frame(width: 15, height: 24)
-                }.buttonStyle(.plain).accessibilityIdentifier("gridline.group.toggle.\(group.id.uuidString)")
-                Circle().fill(Color(red: 0.68, green: 0.86, blue: 0.48)).frame(width: 7, height: 7)
-                if editingGroup == group.id {
-                    TextField("Work group name", text: $groupDraft, onCommit: {
-                        workspace.renameGroup(group, to: groupDraft); editingGroup = nil
-                    }).textFieldStyle(.plain).font(.system(size: 13, weight: .semibold))
-                        .onExitCommand { editingGroup = nil }
-                } else {
-                    Text(group.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                        .accessibilityIdentifier("gridline.group.name.\(group.id.uuidString)")
-                        .onTapGesture(count: 2) { groupDraft = group.name; editingGroup = group.id }
-                }
-                Text("\(groupSessions.count)").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                Button { groupDraft = group.name; editingGroup = group.id } label: { Image(systemName: "pencil").font(.system(size: 10)) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Rename work group")
-                Menu {
-                    if groupSessions.isEmpty {
-                        Button("Start Codex session") { workspace.addSession(to: group, kind: .codex) }
-                            .accessibilityIdentifier("gridline.group.addCodex.\(group.id.uuidString)")
-                    }
-                    Divider()
-                    Button("Choose project folder…") { workspace.chooseDirectory(for: group) }
-                } label: { Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).frame(width: 22, height: 22) }
-                    .menuStyle(.borderlessButton).help(groupSessions.isEmpty ? "Start the group's Codex terminal or choose its folder" : "Choose this group's project folder")
-                    .accessibilityIdentifier("gridline.group.addSession.\(group.id.uuidString)")
-                Button { workspace.closeGroup(group) } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 28, height: 28)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Close this work group and all its terminals")
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Close work group \(group.name) and its terminals")
-                    .accessibilityIdentifier("gridline.group.close.\(group.id.uuidString)")
-            }
-            .padding(.horizontal, 12).frame(height: 43)
-            .background(Color.white.opacity(0.035))
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Work group header: \(group.name)")
-            .accessibilityIdentifier("gridline.group.header.\(group.id.uuidString)")
-
-            if !group.isCollapsed {
-                HStack(spacing: 5) {
-                    Image(systemName: "folder").font(.system(size: 9))
-                    Text(group.directory == NSHomeDirectory() ? "~" : group.directory)
-                        .lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Button("Change") { workspace.chooseDirectory(for: group) }
-                        .buttonStyle(.plain).foregroundStyle(Color(red: 0.65, green: 0.78, blue: 0.56))
-                        .accessibilityIdentifier("gridline.group.folder.\(group.id.uuidString)")
-                }
-                .font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-
-                LazyVGrid(columns: [GridItem(.flexible())], spacing: 8) {
-                    ForEach(groupSessions) { session in sessionCard(session) }
-                }
-                .padding(.horizontal, 9).padding(.bottom, 9)
-                if groupSessions.isEmpty {
-                    Button("Start a Codex session") { workspace.addSession(to: group, kind: .codex) }
-                        .font(.system(size: 11)).padding(.bottom, 12)
-                        .accessibilityIdentifier("gridline.group.startCodex.\(group.id.uuidString)")
-                }
-            }
-        }
-        .background(Color(red: 0.10, green: 0.105, blue: 0.115))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.10), lineWidth: 1))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("gridline.group.card.\(group.id.uuidString)")
-    }
-
-    private func sessionCard(_ session: TerminalSession) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 7) {
-                Circle().fill(session.isRunning ? Color.green : Color.gray).frame(width: 6, height: 6)
-                if editingSession == session.id {
-                    TextField("Session label", text: $sessionDraft, onCommit: {
-                        session.rename(sessionDraft); editingSession = nil
-                    }).textFieldStyle(.plain).font(.system(size: 10, weight: .medium))
-                        .onExitCommand { editingSession = nil }
-                } else {
-                    Text(session.label).font(.system(size: 10, weight: .medium)).lineLimit(1)
-                        .accessibilityIdentifier("gridline.session.label.\(session.id.uuidString)")
-                        .onTapGesture(count: 2) { sessionDraft = session.label; editingSession = session.id }
-                }
-                Text(session.kind == .codex ? "CODEX" : "SHELL")
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 3))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 2)
-                Button { sessionDraft = session.label; editingSession = session.id } label: { Image(systemName: "pencil").font(.system(size: 9)) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Rename session")
-                Button { session.zoomOut() } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 10)) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary)
-                    .disabled(session.fontSize <= TerminalSession.minimumFontSize)
-                    .help("Zoom out terminal")
-                    .accessibilityLabel("Zoom out terminal")
-                    .accessibilityIdentifier("gridline.session.zoomOut.\(session.id.uuidString)")
-                Text("\(Int(session.fontSize))")
-                    .font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityLabel("Terminal font size \(Int(session.fontSize)) points")
-                    .accessibilityIdentifier("gridline.session.fontSize.\(session.id.uuidString)")
-                Button { session.zoomIn() } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: 10)) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary)
-                    .disabled(session.fontSize >= TerminalSession.maximumFontSize)
-                    .help("Zoom in terminal")
-                    .accessibilityLabel("Zoom in terminal")
-                    .accessibilityIdentifier("gridline.session.zoomIn.\(session.id.uuidString)")
-                Button { workspace.close(session) } label: { Image(systemName: "xmark").font(.system(size: 9, weight: .medium)) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Close session")
-                    .accessibilityIdentifier("gridline.session.close.\(session.id.uuidString)")
-            }
-            .padding(.horizontal, 9).frame(height: 31)
-            .background(Color(red: 0.12, green: 0.125, blue: 0.135))
-            TerminalPane(session: session)
-                .frame(height: session.terminalHeight)
-                .background(Color(red: 0.035, green: 0.04, blue: 0.045))
-            TerminalHeightResizeHandle(
-                sessionID: session.id,
-                height: session.terminalHeight
-            ) { height, isFinal in
-                workspace.resizeTerminal(session, to: height, save: isFinal)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        template.makeWorkGroupCard(GridlineWorkGroupCardContext(
+            group: group,
+            groupSessions: workspace.groupSessions(group),
+            template: template,
+            workspace: workspace,
+            editingGroup: $editingGroup,
+            groupDraft: $groupDraft,
+            editingSession: $editingSession,
+            sessionDraft: $sessionDraft
+        ))
     }
 
     private func chooseAudioForTranscription() {
@@ -1666,81 +1589,34 @@ private struct TranscriptionLoaderView: View {
 }
 
 private struct SkillScriptDropdownView: View {
+    @EnvironmentObject private var templateStore: GridlineTemplateStore
     let onAudioToText: () -> Void
     let onVoiceTodo: () -> Void
-    @State private var isAudioHovered = false
-    @State private var isVoiceHovered = false
+
+    private var palette: GridlineTemplate.Palette { templateStore.activeTemplate.palette }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("SKILL SCRIPTS")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .tracking(0.8)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.top, 5)
-
-            Button(action: onAudioToText) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.mint)
-                        .frame(width: 20, height: 24)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Audio to text")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.primary)
-                        Text("Transcribe a recording for your LLM")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.tertiary)
-                        .padding(.top, 4)
-                }
-                .padding(9)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    Color.white.opacity(isAudioHovered ? 0.08 : 0.025),
-                    in: RoundedRectangle(cornerRadius: 7)
-                )
-            }
-            .buttonStyle(.plain)
-            .onHover { isAudioHovered = $0 }
+        MainTemplateDropdownPanel(title: "SKILL SCRIPTS", palette: palette, width: 248) {
+            MainTemplateDropdownActionRow(
+                title: "Audio to text",
+                subtitle: "Transcribe a recording for your LLM",
+                systemImage: "waveform",
+                tint: palette.accent,
+                identifier: "gridline.skillScript.audioToText",
+                action: onAudioToText
+            )
             .accessibilityLabel("Audio to text")
-            .accessibilityIdentifier("gridline.skillScript.audioToText")
 
-            Button(action: onVoiceTodo) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.mint)
-                        .frame(width: 20, height: 24)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Voice todo")
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(.primary)
-                        Text("Listen live and capture problem bullets")
-                            .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.tertiary).padding(.top, 4)
-                }
-                .padding(9).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(isVoiceHovered ? 0.08 : 0.025), in: RoundedRectangle(cornerRadius: 7))
-            }
-            .buttonStyle(.plain)
-            .onHover { isVoiceHovered = $0 }
+            MainTemplateDropdownActionRow(
+                title: "Voice todo",
+                subtitle: "Listen live and capture problem bullets",
+                systemImage: "waveform",
+                tint: .mint,
+                identifier: "gridline.skillScript.voiceTodo",
+                action: onVoiceTodo
+            )
             .accessibilityLabel("Voice todo")
-            .accessibilityIdentifier("gridline.skillScript.voiceTodo")
         }
-        .padding(10)
-        .background(Color(red: 0.10, green: 0.105, blue: 0.115), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.12), lineWidth: 1))
-        .shadow(color: .black.opacity(0.38), radius: 14, x: 0, y: 8)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Skill scripts")
         .accessibilityIdentifier("gridline.skillScript.dropdown")

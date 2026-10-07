@@ -4,7 +4,11 @@ Keep this file as the compact map. Read the one relevant source file next; do no
 
 ## Fast paths
 
-- Group grid, header, toolbar: `gridline/Sources/Gridline/Workspace.swift` → `WorkspaceView`
+- Compact workspace shell and grid: `gridline/Sources/Gridline/Workspace.swift` → `WorkspaceView`
+- Reusable provider detection and usage snapshots: `gridline/Sources/Gridline/ProviderUsageService.swift`; bundled readers and API-equivalent calculations: `gridline/usage/`; rate-table update instructions and official links: `gridline/usage/README.md`
+- Top status presentation: `gridline/template/main_template/MainTemplateUsageStatusView.swift`, created by the selected template's `makeUsageStatusView` factory.
+- Template catalog: `gridline/template/TemplateCatalog.swift` → `GridlineTemplateCatalog`; main skin UI: `gridline/template/main_template/`; terminal labels persist through `TerminalSession.rename(_:)` → `WorkspaceStore.changed()` → `workspace.json` in `gridline/Sources/Gridline/Workspace.swift`
+- Active template Accessibility container: `gridline.template.active.<template_id>`; future selector and options map to `gridline.template.selector` and `gridline.template.option.<template_id>` in `GridlineCodeContext.swift`
 - Default folder prompt (`cd`, `pwd`, `ls`) and organized listing dropdown: `WorkspaceView.runDirectoryCommand()` → `WorkspaceStore.runDirectoryCommand(_:)` in `gridline/Sources/Gridline/Workspace.swift`
 - Add/close sessions, collapse groups, folder selection, persistence: `gridline/Sources/Gridline/Workspace.swift` → `WorkspaceStore`
 - Terminal process, label changes, Codex title event: `gridline/Sources/Gridline/Workspace.swift` → `TerminalSession`
@@ -21,15 +25,19 @@ Keep this file as the compact map. Read the one relevant source file next; do no
 - `gridline.group.new` — create work group
 - `gridline.session.newCodex` — create Codex terminal
 - `gridline.workspace.directoryCommand` — `cd`/`pwd`/`ls` prompt for the saved default folder used by new groups and terminals
+- `gridline.workspace.tokenUsage` — visible cyan weekly ChatGPT meter; clicking it opens refresh settings without hiding the meter. Automatic allowance fetch defaults to 3 seconds, supports 1-second minimum and custom millisecond/second/minute intervals, can be disabled, and caches the last value. Claude's rolling seven-day meter appears only while a Claude process is running in a Gridline terminal. UI: `gridline/template/main_template/MainTemplateUsageStatusView.swift`; reusable dropdown UI: `MainTemplateDropdownPanel.swift` and `MainTemplateDropdownActionRow.swift` in `gridline/template/main_template/`; data: `gridline/Sources/Gridline/ProviderUsageService.swift`, `gridline/usage/monitor.py`, `gridline/usage/claude_usage.py`
+- `gridline.workspace.usageRefresh.auto` / `.interval` / `.intervalEditor` — adjust automatic ChatGPT allowance fetching, its saved interval, and custom time units.
+- `gridline.workspace.utilityMenu` — opens the shared palette-aware dropdown panel for workgroup navigation, directory prompt, skill scripts, app tabs, and grid layout; panel and row styling are reusable from `MainTemplateDropdownPanel.swift` and `MainTemplateDropdownActionRow.swift` in `gridline/template/main_template/`
 - `gridline.skillScript.menu` / `.dropdown` / `.audioToText` / `.transcriptionOptions` / `.speakerMode` / `.pauseMode` / `.startTranscription` / `.transcriptionModal` / `.transcriptionLoading` / `.transcript` / `.transcriptStats` / `.copyTranscript` / `.saveTranscript` — choose speaker-labeled diarization or faster pause-based paragraphs, then preview, copy, or save the transcript
 - `gridline.skillScript.voiceTodo` — open the continuous local Voice todo capture modal; short mic chunks go through one local Whisper worker and the modal fills an editable text box
 - `gridline.workspace.tab.workspace` / `.voiceTodo` — switch between the terminal workspace and Voice todo landing page; the Voice todo page opens the live capture modal
 - `gridline.voiceTodo.open` / `.modal` / `.status` / `.start` / `.endProblem` / `.stop` / `.input` / `.meter` / `.confidence` / `.confidenceThreshold` / `.copy` / `.close` — Problem Notes are cached locally across app restarts and stay empty until “OK, problem” or “OK, next problem” meets the adjustable shared confidence threshold; the bottom waveform reflects mic level
-- `gridline.workspace.groupSidebar` / `.panel` / `.item.<UUID>` — toggle the left overlay without resizing terminals; selecting a group scrolls to its card and briefly highlights its border
-- `gridline.group.toggle.<UUID>` — collapse/expand group
+- `gridline.workspace.groupSidebar` / `.panel` / `.item.<UUID>` — menu action toggles the left overlay without resizing terminals; selecting a group scrolls to its card and briefly highlights its border
+- `gridline.group.toggle.<UUID>` — rightmost one-click chevron collapses or expands the whole work-group tile; the adjacent, size-constrained ellipsis menu remains for folder, terminal, zoom, rename, and close actions
+- `gridline.workgroups.expandAll` / `gridline.workgroups.collapseAll` — Gridline macOS app-menu actions to show or collapse all work-group terminals; each group's `isCollapsed` value is persisted to `workspace.json`.
 - `gridline.group.close.<UUID>` — close the work-group cell and terminate every terminal inside it
-- `gridline.group.header.<UUID>` — gray work-group header region (including empty header space)
-- `gridline.group.card.<UUID>` — whole work-group card container
+- `gridline.group.header.<UUID>` — compact, workgroup-colored label and action row
+- `gridline.group.card.<UUID>` — whole colored work-group terminal tile
 - `gridline.group.name.<UUID>` — group title
 - `gridline.group.addCodex.<UUID>` — start the work group's single Codex terminal when its slot is empty; new shell sessions are disabled
 - `gridline.group.folder.<UUID>` — project folder picker

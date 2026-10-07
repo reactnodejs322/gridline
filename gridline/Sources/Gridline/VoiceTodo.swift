@@ -455,6 +455,7 @@ private extension Data {
 }
 
 struct VoiceTodoModalView: View {
+    @EnvironmentObject private var templateStore: GridlineTemplateStore
     @ObservedObject var model: VoiceTodoModel
     let onClose: () -> Void
     @State private var didCopy = false
@@ -526,7 +527,7 @@ struct VoiceTodoModalView: View {
                 .padding(.horizontal, 24).padding(.vertical, 17)
             }
             .frame(width: 740, height: 610)
-            .background(Color(red: 0.075, green: 0.085, blue: 0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(templateStore.activeTemplate.palette.elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
             .shadow(color: .black.opacity(0.55), radius: 35, y: 18)
             .accessibilityIdentifier("gridline.voiceTodo.modal")
