@@ -27,18 +27,23 @@ That wall of tabs is the problem: every new request adds another place to lose c
 
 ## Vibe-code your terminal workflow
 
-Gridline is open source and made to grow with the way you work. You can point your coding assistant to the exact part of the interface you mean with the companion **Gridline Debug** inspector:
-
-1. Start Gridline and Gridline Debug with `./start.sh`, then bring the Gridline Debug window forward.
-2. Hover over the control you want changed in Gridline. The inspector highlights the element; click it to pin that selection.
-3. Choose **Copy LLM context** in Gridline Debug. This copies the selected control's details, likely source file, a search command, and relevant app events.
-4. Paste that context into your coding assistant and describe what you want the interface to do. For example: “Move the weekly usage meter into the top status area, shown once for the workspace.”
-
-This lets you identify the target directly instead of describing its location from memory. The inspector reads interface accessibility information; it does not capture terminal text or keystrokes.
+<div align="center">
+  <h3>Point to the control. Copy its context. Describe the change.</h3>
+  <p><strong>Gridline Debug helps your coding assistant know exactly which part of Gridline you mean.</strong><br />Select an interface element, copy its code context, then tell your assistant what you want changed.</p>
+</div>
 
 <p align="center">
-  <img src="helper.png" alt="Gridline Debug highlights a selected terminal control and copies its LLM context for a coding assistant" width="100%" />
+  <img src="helper.png" alt="The red outline marks the selected terminal in Gridline; the arrow points to Copy LLM context in Gridline Debug" width="100%" />
+  <br /><em>The red outline shows the selected Gridline element. The arrow points to the button that copies its context.</em>
 </p>
+
+| **1 · Select the target** | **2 · Copy its context** | **3 · Describe your request** |
+| --- | --- | --- |
+| In Gridline Debug, hover over the control in Gridline and click it to pin the selection. | Click **Copy LLM context**. Gridline Debug copies the selected element, likely source path, search command, and relevant events. | Paste the context into your coding assistant and explain the behavior or appearance you want. The assistant uses the selection to locate the right code. |
+
+**Example request:** “Show the weekly usage meter once in the workspace header, not inside every terminal.”
+
+Gridline Debug identifies the UI element and provides code breadcrumbs; it does not make the requested change itself. It reads interface accessibility information and does not capture terminal text or keystrokes.
 
 When extending Gridline's interface, reuse and extend its existing controls, spacing, colors, and button styles. Add a new component only when the interaction needs one, and keep its appearance consistent with the rest of the workspace.
 
