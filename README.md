@@ -29,15 +29,20 @@ That wall of tabs is the problem: every new request adds another place to lose c
 
 Gridline is open source and made to grow with the way you work. Use the companion **Gridline Debug** inspector to click an interface element, copy its Accessibility details and likely source-code path, then tell your coding assistant what you want changed. Describe the workflow you want; Gridline gives your assistant useful context to start shaping it.
 
+When extending Gridline's interface, reuse and extend its existing controls, spacing, colors, and button styles. Add a new component only when the interaction needs one, and keep its appearance consistent with the rest of the workspace.
+
 ## Build and run
 
 Gridline is an open source macOS app. To build it from this repository, use macOS 13 or newer with Xcode Command Line Tools installed:
 
 ```sh
+git lfs install
 git clone https://github.com/reactnodejs322/gridline.git
 cd gridline
 ./start.sh
 ```
+
+Git LFS is required to download the bundled speech models under `skill_script/resources/models`. Install Git LFS before running these commands (for example, `brew install git-lfs` with Homebrew on macOS). If you already cloned the repository without Git LFS, run `git lfs pull` from the repository directory to fetch the model files.
 
 The first build downloads SwiftTerm through Swift Package Manager. `start.sh` builds and opens Gridline and its companion Gridline Debug inspector, then keeps a watcher running in the terminal. Install the Codex CLI separately to start Codex sessions.
 

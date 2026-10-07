@@ -25,6 +25,20 @@ enum GridlineCodeContext {
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.body workspace header. The inline `cd` prompt in this row controls Gridline's default starting folder."
         case "gridline.workspace.directoryCommand", "gridline.workspace.defaultDirectory":
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.runDirectoryCommand() → WorkspaceStore.runDirectoryCommand(_:); supports cd, pwd, and ls, saves the default folder, and renders an organized directory listing."
+        case "gridline.skillScript.menu", "gridline.skillScript.dropdown", "gridline.skillScript.audioToText",
+             "gridline.skillScript.transcriptionModal", "gridline.skillScript.transcriptionLoading",
+             "gridline.skillScript.transcript", "gridline.skillScript.transcriptStats",
+             "gridline.skillScript.transcriptionOptions", "gridline.skillScript.speakerMode",
+             "gridline.skillScript.pauseMode", "gridline.skillScript.startTranscription",
+             "gridline.skillScript.copyTranscript", "gridline.skillScript.saveTranscript",
+             "gridline.skillScript.closeTranscript", "gridline.skillScript.transcriptionError":
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView custom skill_script dropdown → AudioTranscriptionOutputView; the Audio to text skill and helpers are in skill_script/audio_to_text/, with model assets in skill_script/resources/models/."
+        case "gridline.skillScript.voiceTodo", "gridline.workspace.tab.voiceTodo", "gridline.workspace.tab.workspace",
+             "gridline.voiceTodo.open", "gridline.voiceTodo.modal", "gridline.voiceTodo.start",
+             "gridline.voiceTodo.endProblem", "gridline.voiceTodo.stop", "gridline.voiceTodo.input",
+             "gridline.voiceTodo.status", "gridline.voiceTodo.meter", "gridline.voiceTodo.confidence",
+             "gridline.voiceTodo.confidenceThreshold", "gridline.voiceTodo.copy", "gridline.voiceTodo.close", "gridline.voiceTodo.home":
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView tabs and custom skill_script menu; live microphone capture and editable transcript modal are in gridline/Sources/Gridline/VoiceTodo.swift, with the persistent Whisper chunk worker in skill_script/voice_todo/voice_todo.py and the shared model in skill_script/resources/models/whisper-small-mlx/."
         case "gridline.workspace.groupSidebar.panel":
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.body → left work-group navigation overlay. It scrolls the main grid to a group; it does not close or restart terminals."
         case "gridline.workspace.groupSidebar":
@@ -51,6 +65,12 @@ enum GridlineCodeContext {
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.groupCard(_:) empty state → WorkspaceStore.addSession(to:kind:) with .codex"
         case let id where id.hasPrefix("gridline.session.label."):
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.sessionCard(_:) → TerminalSession.rename(_:) (double-click the label, then press Return)"
+        case let id where id.hasPrefix("gridline.session.zoomIn.") || id.hasPrefix("gridline.session.zoomOut."):
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.sessionCard(_:) → TerminalSession.zoomIn()/zoomOut(); saves the selected terminal's font size in workspace.json"
+        case let id where id.hasPrefix("gridline.session.fontSize."):
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.sessionCard(_:) font size display; per-session size is persisted with SavedSession"
+        case let id where id.hasPrefix("gridline.session.resizeHeight."):
+            return "gridline/Sources/Gridline/Workspace.swift → TerminalHeightResizeHandle → WorkspaceStore.resizeTerminal(_:to:save:); saves this terminal's height in workspace.json"
         case let id where id.hasPrefix("gridline.session.terminal."):
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.sessionCard(_:) → TerminalPane(session:) → TerminalSession.init(saved:directory:) starts SwiftTerm's LocalProcessTerminalView and launches /bin/zsh; Codex sessions send `codex` to that shell."
         case let id where id.hasPrefix("gridline.session.close."):
@@ -70,6 +90,24 @@ enum GridlineCodeContext {
         case let id where id.hasPrefix("gridline.workspace.groupSidebar.item."): return "workgroup.sidebarSelected"
         case "gridline.workspace.groupSidebar.panel": return "No direct action; selecting a child group row scrolls the main workspace."
         case "gridline.workspace.title": return "No direct action; use the directory command field."
+        case "gridline.skillScript.menu": return "skillScript.menuToggled"
+        case "gridline.skillScript.dropdown": return "Container only; choose a skill-script item."
+        case "gridline.skillScript.audioToText": return "skillScript.selected"
+        case "gridline.skillScript.voiceTodo": return "skillScript.selected; voiceTodo.listeningStarted; voiceTodo.listeningStopped; voiceTodo.problemEnded"
+        case "gridline.workspace.tab.voiceTodo": return "voiceTodo.tabSelected"
+        case "gridline.workspace.tab.workspace": return "workspace.tabSelected"
+        case "gridline.voiceTodo.start": return "voiceTodo.listeningStarted"
+        case "gridline.voiceTodo.stop": return "voiceTodo.listeningStopped"
+        case "gridline.voiceTodo.endProblem": return "voiceTodo.problemEnded"
+        case "gridline.voiceTodo.confidenceThreshold": return "voiceTodo.confidenceThresholdChanged"
+        case "gridline.voiceTodo.confidence": return "No direct action; reports the latest approximate Whisper segment score and the shared acceptance threshold."
+        case "gridline.voiceTodo.open": return "No direct event; opens the Voice todo modal."
+        case "gridline.voiceTodo.input": return "No direct event; recognized speech updates the editable text box."
+        case "gridline.voiceTodo.meter", "gridline.voiceTodo.status": return "No direct event; this view reflects live microphone input state and level."
+        case "gridline.voiceTodo.copy": return "No direct event; copies the edited Voice todo text to the clipboard."
+        case "gridline.voiceTodo.modal", "gridline.voiceTodo.home", "gridline.voiceTodo.close": return "No direct event; modal or page container."
+        case "gridline.skillScript.speakerMode", "gridline.skillScript.pauseMode": return "No direct event; selection is passed to skill_script/audio_to_text/audio_to_text.py when started."
+        case "gridline.skillScript.saveTranscript": return "skillScript.transcriptSaved"
         case let id where id.hasPrefix("gridline.group.toggle."): return "workgroup.toggled"
         case let id where id.hasPrefix("gridline.group.close."): return "workgroup.closed"
         case let id where id.hasPrefix("gridline.group.header."): return "No direct action; inspect child control events if one was clicked."
@@ -79,6 +117,9 @@ enum GridlineCodeContext {
         case let id where id.hasPrefix("gridline.group.folder."): return "workgroup.folderChanged"
         case let id where id.hasPrefix("gridline.group.startCodex."): return "session.created; terminal.started"
         case let id where id.hasPrefix("gridline.session.label."): return "session.renamed"
+        case let id where id.hasPrefix("gridline.session.zoomIn.") || id.hasPrefix("gridline.session.zoomOut."): return "terminal.zoomChanged"
+        case let id where id.hasPrefix("gridline.session.fontSize."): return "No direct action; zoom buttons emit terminal.zoomChanged"
+        case let id where id.hasPrefix("gridline.session.resizeHeight."): return "terminal.heightChanged"
         case let id where id.hasPrefix("gridline.session.terminal."): return "No semantic event is emitted for clicks or typing inside the terminal. Lifecycle events are terminal.started and terminal.exit; terminal text and keystrokes are not captured."
         case let id where id.hasPrefix("gridline.session.close."): return "session.closed; terminal.exit"
         default: return "See the recent Gridline behavior log below."
@@ -91,6 +132,21 @@ enum GridlineCodeContext {
         case "gridline.session.newCodex": return "Create a new Codex terminal session."
         case "gridline.layout.columns": return "Change the workspace grid column count."
         case "gridline.workspace.title": return "Workspace header. Use the inline cd prompt in this row to set the default starting folder."
+        case "gridline.skillScript.menu": return "Open Gridline's custom, workspace-styled list of text-extraction scripts."
+        case "gridline.skillScript.dropdown": return "Custom skill-script dropdown panel."
+        case "gridline.skillScript.audioToText": return "Open the file selector and run local Whisper transcription plus speaker diarization for copyable text."
+        case "gridline.skillScript.transcriptionOptions": return "Choose speaker labels or a faster transcript with paragraph breaks after pauses."
+        case "gridline.skillScript.speakerMode": return "Enable local speaker diarization and label turns Person 1, Person 2, and so on."
+        case "gridline.skillScript.pauseMode": return "Skip speaker analysis and start a paragraph after pauses of about two seconds."
+        case "gridline.skillScript.startTranscription": return "Run the selected local transcript mode for the chosen audio or video file."
+        case "gridline.skillScript.transcriptionModal": return "Large custom in-app transcript dialog with loading, preview, copy, and save states."
+        case "gridline.skillScript.transcriptionLoading": return "Custom animated local transcription progress view."
+        case "gridline.skillScript.transcript": return "Scrollable, selectable transcript grouped into Person-labeled speaker turns."
+        case "gridline.skillScript.transcriptStats": return "Transcript speaker-turn line and word counts."
+        case "gridline.skillScript.copyTranscript": return "Copy the full transcript to the clipboard."
+        case "gridline.skillScript.saveTranscript": return "Choose a destination and save the transcript as a plain-text file."
+        case "gridline.skillScript.closeTranscript": return "Close the transcription dialog."
+        case "gridline.skillScript.transcriptionError": return "Local transcription status or error message."
         case "gridline.workspace.directoryCommand": return "Run `cd`, `pwd`, or `ls`; press Tab after a partial `cd` to complete folder names. Choosing a match navigates there immediately. No other commands execute."
         case "gridline.workspace.defaultDirectory": return "Inline cd/pwd/ls prompt and current default folder display."
         case "gridline.workspace.groupSidebar": return "Show or hide the work-group navigation overlay. Terminal sessions keep running."
@@ -106,6 +162,10 @@ enum GridlineCodeContext {
         case let id where id.hasPrefix("gridline.group.folder."): return "Choose or change this work group's project folder."
         case let id where id.hasPrefix("gridline.group.startCodex."): return "Start a Codex terminal in this work group."
         case let id where id.hasPrefix("gridline.session.label."): return "Rename this terminal session."
+        case let id where id.hasPrefix("gridline.session.zoomIn."): return "Zoom in this terminal by one point. The size is saved for this terminal."
+        case let id where id.hasPrefix("gridline.session.zoomOut."): return "Zoom out this terminal by one point. The size is saved for this terminal."
+        case let id where id.hasPrefix("gridline.session.fontSize."): return "Current font size for this terminal, saved per session."
+        case let id where id.hasPrefix("gridline.session.resizeHeight."): return "Drag this handle up or down to resize only this terminal pane. Height is saved per session."
         case let id where id.hasPrefix("gridline.session.terminal."): return "Interact with the \(title.isEmpty ? "terminal" : title). Gridline captures which terminal surface was clicked, not its input or output."
         case let id where id.hasPrefix("gridline.session.close."): return "Close this terminal session."
         default: return title.isEmpty ? "No action mapping yet; inspect the code path and Accessibility hierarchy." : "Selected control: \(title)"

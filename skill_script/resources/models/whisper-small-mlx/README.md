@@ -1,0 +1,17 @@
+---
+library_name: mlx
+pipeline_tag: automatic-speech-recognition
+---
+
+# whisper-small-mlx
+This model was converted to MLX format from [`small`]().
+
+## Use with mlx
+```bash
+git clone https://github.com/ml-explore/mlx-examples.git
+cd mlx-examples/whisper/
+pip install -r requirements.txt
+
+>> import whisper
+>> whisper.transcribe("FILE_NAME")
+```

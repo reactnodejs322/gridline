@@ -21,6 +21,10 @@ Keep this file as the compact map. Read the one relevant source file next; do no
 - `gridline.group.new` — create work group
 - `gridline.session.newCodex` — create Codex terminal
 - `gridline.workspace.directoryCommand` — `cd`/`pwd`/`ls` prompt for the saved default folder used by new groups and terminals
+- `gridline.skillScript.menu` / `.dropdown` / `.audioToText` / `.transcriptionOptions` / `.speakerMode` / `.pauseMode` / `.startTranscription` / `.transcriptionModal` / `.transcriptionLoading` / `.transcript` / `.transcriptStats` / `.copyTranscript` / `.saveTranscript` — choose speaker-labeled diarization or faster pause-based paragraphs, then preview, copy, or save the transcript
+- `gridline.skillScript.voiceTodo` — open the continuous local Voice todo capture modal; short mic chunks go through one local Whisper worker and the modal fills an editable text box
+- `gridline.workspace.tab.workspace` / `.voiceTodo` — switch between the terminal workspace and Voice todo landing page; the Voice todo page opens the live capture modal
+- `gridline.voiceTodo.open` / `.modal` / `.status` / `.start` / `.endProblem` / `.stop` / `.input` / `.meter` / `.confidence` / `.confidenceThreshold` / `.copy` / `.close` — Problem Notes are cached locally across app restarts and stay empty until “OK, problem” or “OK, next problem” meets the adjustable shared confidence threshold; the bottom waveform reflects mic level
 - `gridline.workspace.groupSidebar` / `.panel` / `.item.<UUID>` — toggle the left overlay without resizing terminals; selecting a group scrolls to its card and briefly highlights its border
 - `gridline.group.toggle.<UUID>` — collapse/expand group
 - `gridline.group.close.<UUID>` — close the work-group cell and terminate every terminal inside it
@@ -29,7 +33,7 @@ Keep this file as the compact map. Read the one relevant source file next; do no
 - `gridline.group.name.<UUID>` — group title
 - `gridline.group.addCodex.<UUID>` — start the work group's single Codex terminal when its slot is empty; new shell sessions are disabled
 - `gridline.group.folder.<UUID>` — project folder picker
-- `gridline.session.label.<UUID>` / `gridline.session.close.<UUID>` — session label and close control
+- `gridline.session.label.<UUID>` / `gridline.session.zoomOut.<UUID>` / `gridline.session.zoomIn.<UUID>` / `gridline.session.fontSize.<UUID>` / `gridline.session.resizeHeight.<UUID>` / `gridline.session.close.<UUID>` — session label, per-terminal font zoom controls and size, bottom-edge height resize handle, and close control; font size and height persist per session
 - `gridline.session.terminal.<UUID>` — native terminal surface, labeled with its session and work-group IDs; terminal text and keystrokes are not captured
 - `gridline.layout.columns` — grid column choice
 

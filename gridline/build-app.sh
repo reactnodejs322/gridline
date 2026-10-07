@@ -31,6 +31,9 @@ LEGACY_GENERIC_APP="$(pwd)/Gridline.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/$CONFIGURATION/Gridline" "$APP/Contents/MacOS/$EXECUTABLE_NAME"
 cp "../logo/Gridline2x.png" "$APP/Contents/Resources/Gridline2x.png"
+rm -rf "$APP/Contents/Resources/skill_script"
+mkdir -p "$APP/Contents/Resources/skill_script"
+cp -R "../skill_script/." "$APP/Contents/Resources/skill_script/"
 "$(pwd)/build-app-icon.sh" "$ICON_SOURCE" "$APP/Contents/Resources/Gridline.icns" Gridline
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -45,6 +48,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>Gridline uses the microphone while Voice todo is open to transcribe speech into editable problem notes.</string>
 </dict></plist>
 PLIST
 codesign --force --deep --sign - \
