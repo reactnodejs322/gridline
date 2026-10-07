@@ -9,11 +9,11 @@ Speaker analysis uses a 0.25 window shift, four CPU threads, and a conservative 
 - `audio_to_text/audio_to_text.py` coordinates the transcription modes.
 - `audio_to_text/speaker_diarization.py` assigns Whisper time ranges to diarized speakers.
 - `audio_to_text/transcript_formatting.py` groups transcript segments across pauses.
-- `../resources/models/whisper-small-mlx/` contains the bundled MLX Whisper model.
+- `../resources/models/whisper-small-mlx/` contains the locally downloaded MLX Whisper model.
 - `../resources/models/speaker-diarization/segmentation/` contains the pyannote segmentation model converted for sherpa-onnx.
 - `../resources/models/speaker-diarization/speaker-embedding/` contains the 3D-Speaker ERes2Net speaker embedding model.
 
-The diarization assets are MIT licensed for segmentation and Apache-2.0 licensed for the speaker embedding model; each model directory includes its license. Their upstream project and model sources are listed in `../resources/models/speaker-diarization/MODELS.md`.
+The model binaries are ignored by Git. Gridline's build setup downloads and verifies missing models into `../resources/models/`; run `python3 skill_script/download_models.py` manually if needed. The diarization assets are MIT licensed for segmentation and Apache-2.0 licensed for the speaker embedding model; each model directory includes its license. Their upstream project and model sources are listed in `../resources/models/speaker-diarization/MODELS.md`.
 
 ## Python packages
 

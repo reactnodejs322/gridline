@@ -14,5 +14,13 @@
 **/reports/*
 !**/reports/.gitkeep
 
+# Model assets for every skill are fetched into resources/models by setup scripts.
+**/resources/models/**
+!**/resources/models/
+!**/resources/models/**/
+!**/resources/models/**/*.md
+!**/resources/models/**/LICENSE
+!**/resources/models/**/config.json
+
 # Generated status for running versioned app copies
 /gridline_versions/runtime-status.json

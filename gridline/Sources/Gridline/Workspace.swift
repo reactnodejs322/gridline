@@ -136,7 +136,7 @@ final class AudioTranscriptionModel: ObservableObject {
                     model.isComplete = false
                     model.status = finished.terminationStatus == 0
                         ? "No speech text was recognized."
-                        : "Local transcription or speaker recognition could not finish. Check the skill_script Python packages and bundled models, then try again."
+                        : "Local transcription or speaker recognition could not finish. Check the skill_script Python packages and downloaded models, then try again."
                 }
             }
         }

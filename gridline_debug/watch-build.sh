@@ -78,6 +78,7 @@ open_apps() {
 fingerprint() {
   {
     find "$ROOT/gridline/Sources" "$ROOT/gridline_debug/Inspector/Sources" "$ROOT/gridline/tools" -type f -name '*.swift' -exec stat -f '%m %N' {} \; 2>/dev/null
+    find "$ROOT/skill_script" -type f ! -path '*/resources/models/*' -exec stat -f '%m %N' {} \; 2>/dev/null
     stat -f '%m %N' "$ROOT/logo/Gridline2x.png" "$ROOT/gridline/build-app-icon.sh" "$ROOT/gridline/build-app.sh" "$ROOT/gridline_debug/build-inspector.sh" "$ROOT/VERSION" 2>/dev/null
   } | sort | shasum -a 256 | cut -d ' ' -f 1
 }
@@ -107,7 +108,7 @@ build_both() {
   fi
 }
 
-echo "Watching ${VERSION_LABEL:-Gridline} Swift sources. Logs: gridline_debug/build/latest.log. Press Ctrl-C to stop."
+echo "Watching ${VERSION_LABEL:-Gridline} app and skill-script sources. Logs: gridline_debug/build/latest.log. Press Ctrl-C to stop."
 previous=""
 while true; do
   current="$(fingerprint)"

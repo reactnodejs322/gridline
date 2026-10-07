@@ -1,69 +1,125 @@
 # Coding Agent Guide
 
-Use this map first, then read the one relevant index or source file. Keep this guide as the technical handoff; README.md is written for people exploring Gridline.
+Start with this map, then open one relevant index or source file.
+This guide is the technical handoff; README.md is for people exploring Gridline.
 
-## Context table
+## Table of Contents
 
-| Task | Start here | Then inspect or search |
+| Chapter | Section | What to find |
 | --- | --- | --- |
-| Choose the app copy | Main app: gridline/ + gridline_debug/. Versioned copy: gridline_versions/version_N/. | Use the target table under Copy selection and isolation. |
-| Find a Gridline control or behavior | gridline_debug/INDEX.md | gridline/Sources/Gridline/Workspace.swift; search the control title or gridline.* identifier. |
-| Change inspector behavior | gridline_debug/INDEX.md | gridline_debug/Inspector/Sources/MyLLMDebug/InspectorView.swift or InspectorStore.swift. |
-| Trace terminal launch, labels, or persistence | gridline/Sources/Gridline/Workspace.swift | Search TerminalSession, WorkspaceStore, addSession, or workspace.json. |
-| Build, launch, or reload | start.sh → gridline_debug/watch-build.sh | gridline/build-app.sh and gridline_debug/build-inspector.sh. |
-| Debug Accessibility or app pairing | gridline_debug/INDEX.md | gridline_debug/Inspector/Sources/MyLLMDebug/DebugElement.swift; check that bundle ID and PID file belong to the same copy. |
-| Read product research | gridline_research/REPOSITORY_RESEARCH.md | Research is background context, not a source code template. |
-| Update public-facing product copy | README.md | Keep implementation maps and LLM instructions here in AGENTS.md, not in the human README. |
+| 1 | [Skill scripts and model resources](#skill-scripts-and-model-resources) | Skills, shared models, and downloads |
+| 1.1 | [Audio to text](#audio-to-text) | File transcription and speaker labels |
+| 1.2 | [Voice todo](#voice-todo) | Live voice capture and Problem Notes |
+| 1.3 | [Model locations and downloads](#model-locations-and-downloads) | Model paths, pins, and checksums |
+| 2 | [Search the code](#grep-guide) | `rg` commands and search scope |
+| 3 | [Choose the app copy](#copy-selection-and-isolation) | Main Gridline or isolated version |
+| 4 | [Project layout](#project-layout) | Repository folders and responsibilities |
+| 5 | [Implementation rules](#implementation-rules) | Shared UI, model, and logging rules |
+| 6 | [Current product behavior](#current-product-and-behavior-context) | Shipped Gridline behavior |
+| 7 | [Source map and identifiers](#source-map-and-stable-identifiers) | Swift files and Accessibility IDs |
+| 8 | [Start the main app](#start-the-main-app) | Build, launch, and hot reload |
+| 9 | [Gridline version lifecycle](#gridline-version-lifecycle) | Create, debug, and stop isolated copies |
+| 9.1 | [Create a version](#create-a-version) | Copy sources and download local models |
+| 9.2 | [Debug an existing version](#debug-an-existing-version) | Start one selected version |
+| 9.3 | [Stop a version](#stop-a-version) | Stop its watcher and app pair |
+| 10 | [Shared stop and diagnostic commands](#shared-stop-and-diagnostic-commands) | Stop copies and locate build reports |
+| 11 | [Inspector permissions and diagnostics](#inspector-permissions-and-diagnostic-data) | Accessibility, logs, and reports |
+| 12 | [Product direction](#product-direction-and-handoff) | Future ideas and handoff guidance |
+
+## Skill scripts and model resources
+
+### Audio to text
+
+- Skill folder: `skill_script/audio_to_text/`.
+- Produces transcripts from selected audio or video files.
+- Uses Whisper and, when enabled, speaker diarization.
+
+### Voice todo
+
+- Skill folder: `skill_script/voice_todo/`.
+- Uses the shared Whisper model for live voice capture.
+- Writes recognized speech into editable Problem Notes.
+
+### Model locations and downloads
+
+- Whisper folder: `skill_script/resources/models/whisper-small-mlx/`.
+- Whisper weights: `skill_script/resources/models/whisper-small-mlx/weights.npz`.
+- Speaker segmentation: `skill_script/resources/models/speaker-diarization/segmentation/model.onnx`.
+- Speaker embeddings: `skill_script/resources/models/speaker-diarization/speaker-embedding/model.onnx`.
+- Downloader: `skill_script/download_models.py`.
+- Model binaries are ignored by Git; the downloader pins revisions and verifies SHA-256.
+- Builds and new version copies download missing models into their own resource folder.
 
 ## Grep guide
 
-Use rg to find a topic before opening a large source file:
+Use `rg` to find a topic before opening a large source file.
 
 ~~~sh
 # Browse this guide, the compact UI index, and research headings.
 rg -n '^#{1,3} ' AGENTS.md gridline_debug/INDEX.md gridline_research/REPOSITORY_RESEARCH.md
 
 # Find main app behavior, visible labels, or stable Accessibility identifiers.
-rg -n -i 'work group|codex|collapse|folder|sidebar|directory command|terminal title|gridline\.' gridline/Sources gridline_debug/Inspector/Sources
+rg -n -i 'work group|codex|collapse|folder|sidebar|directory command|terminal title|gridline\.' \
+  gridline/Sources gridline_debug/Inspector/Sources
 
 # Find a behavior in a numbered snapshot; replace version_1 if needed.
-rg -n -i 'FEATURE OR CONTROL WORDS' gridline_versions/version_1/gridline_debug/INDEX.md gridline_versions/version_1/gridline/Sources gridline_versions/version_1/gridline_debug/Inspector/Sources
+rg -n -i 'FEATURE OR CONTROL WORDS' \
+  gridline_versions/version_1/gridline_debug/INDEX.md \
+  gridline_versions/version_1/gridline/Sources \
+  gridline_versions/version_1/gridline_debug/Inspector/Sources
 
 # Find launcher, pairing, or permission behavior.
-rg -n 'watch-build|GridlineTargetBundleID|GridlineTargetPIDFile|gridline\.pid|Accessibility' start.sh start_versions.sh stop.sh gridline_debug gridline_versions
+rg -n 'watch-build|GridlineTargetBundleID|GridlineTargetPIDFile|gridline\.pid|Accessibility' \
+  start.sh start_versions.sh stop.sh gridline_debug gridline_versions
 ~~~
 
-For a main app change, search gridline/Sources and gridline_debug/Inspector/Sources. For a version change, search only that version's two app trees. Replace FEATURE OR CONTROL WORDS with terms from the requested behavior. Prefer opening one relevant Swift file after locating it rather than loading the repository broadly.
+- Main app changes: search `gridline/` and `gridline_debug/`.
+- Version changes: search only the selected version's app trees.
+- Replace `FEATURE OR CONTROL WORDS` with terms from the request.
+- Open the relevant source after locating it; avoid broad file dumps.
 
 ## Copy selection and isolation
 
-Always decide which copy the user means before editing. The main app and numbered versions are separate source trees with their own app identities, workspace data, event logs, and paired inspectors.
+Choose the requested app copy before editing.
+Main and versioned copies have separate app identities and runtime data.
 
-| Target | Gridline source | Inspector source | Start or debug |
-| --- | --- | --- | --- |
-| Main Gridline | gridline/ | gridline_debug/ | From the project root, run ./start.sh. |
-| Version 1 | gridline_versions/version_1/gridline/ | gridline_versions/version_1/gridline_debug/ | Run ./start_versions.sh, choose Debug, and select version_1; or run that copy's ./start.sh. |
-| Another version | gridline_versions/version_N/gridline/ | gridline_versions/version_N/gridline_debug/ | Select that exact version with ./start_versions.sh, or run its own start.sh. |
+| Target | Source roots | Start or debug |
+| --- | --- | --- |
+| Main | `gridline/`, `gridline_debug/` | Run `./start.sh`. |
+| Version 1 | `gridline_versions/version_1/` | Select Version 1 in `./start_versions.sh`. |
+| Version N | `gridline_versions/version_N/` | Select it in `./start_versions.sh`. |
 
-Do not edit root gridline/ when asked to change Version 1. Do not copy changes between the main app and a version unless asked. A version is an isolated snapshot with its own root VERSION, Gridline bundle ID, inspector target bundle ID, workspace data, and debug event log. Keep those values scoped to that version. The root README.md is the human product overview; each version has its own local note and AGENTS.md when present.
+- Do not edit root `gridline/` for a Version 1 request.
+- Do not copy changes between app copies unless requested.
+- Each version has its own IDs, workspace data, and debug event log.
+- Keep version-specific values scoped to that version.
+- Root `README.md` is the human overview; versions may have their own `AGENTS.md`.
 
 ## Project layout
 
 - gridline/ contains the main native macOS app, Swift package, app build scripts, and app-specific notes.
 - gridline_debug/ contains the companion inspector, its Swift package, INDEX.md, behavior logs, reports, and build diagnostics.
 - gridline_research/ contains product and repository research, including comparisons with other terminal projects.
+- `skill_script/` contains selectable local-processing skills and their setup script.
 - logo/Gridline2x.png is the shared editable logo source. The inspector build generates its bug-badge variant from this file.
 - The root contains README.md, this AGENTS.md, start.sh, start_versions.sh, and stop.sh.
-- Swift Package Manager checkouts and build products live under .build/; .gitignore excludes them. Commit Package.swift and Package.resolved, not .build/.
+- SwiftPM checkouts and build products are in `.build/` and ignored by Git.
+- Commit `Package.swift` and `Package.resolved`, not `.build/`.
 
 ## Implementation rules
 
-- Before changing app behavior, read gridline_debug/INDEX.md for the compact map from UI behavior and Accessibility identifiers to source files.
-- Reuse existing functions, views, styles, and shared helpers. Extend an existing implementation when possible; do not create duplicate code or parallel styling systems for the same behavior.
-- Keep Gridline implementation in gridline/ and inspector implementation in gridline_debug/. Put cross-app launch/build coordination in the root launcher or gridline_debug/watch-build.sh.
-- Keep the apps native SwiftUI/AppKit and preserve stable Accessibility identifiers and meaningful semantic events.
-- Never write terminal output, control values, credentials, or API keys to inspector logs or reports. Terminal text and keystrokes are not captured by the inspector.
-- Keep README and index paths aligned with the current folder structure. Keep the README human-facing; put coding-agent context in this file and concise UI lookup details in gridline_debug/INDEX.md.
+- Keep all skill models under `skill_script/resources/models/`.
+- Never commit model binaries.
+- Keep pinned model URLs and SHA-256 values in `skill_script/download_models.py`.
+- Document new model paths in `skill_script/README.md` and this map.
+- Git ignore and version-copy rules cover model binaries for every skill.
+- Read `gridline_debug/INDEX.md` before changing app behavior.
+- Reuse existing views, styles, functions, and helpers.
+- Keep Gridline code in `gridline/` and inspector code in `gridline_debug/`.
+- Put cross-app build coordination in root launchers or the watcher.
+- Preserve stable Accessibility identifiers and semantic events.
+- Never log terminal text, keystrokes, credentials, or control values.
+- Keep implementation guidance here and user-facing copy in `README.md`.
 
 ## Current product and behavior context
 
@@ -93,16 +149,52 @@ Stable identifiers include gridline.group.new, gridline.session.newCodex, gridli
 
 Per-terminal controls also use `gridline.session.zoomOut.<UUID>`, `gridline.session.zoomIn.<UUID>`, `gridline.session.fontSize.<UUID>`, and `gridline.session.resizeHeight.<UUID>`.
 
-## Build, launch, and reload
+## Start the main app
 
-- From the root, ./start.sh builds and opens one main Gridline and one matching Gridline Debug, then watches Swift sources. Leave its terminal open; press Ctrl-C to stop the watcher.
-- ./start_versions.sh offers Create, Debug, and Stop. Create makes the next isolated snapshot. Debug launches the selected version. Stop closes only that version's pair and watcher.
-- ./stop.sh stops the main pair and numbered versions, including watchers and Gridline-launched terminal child processes. This ends active terminal sessions.
-- A successful Swift rebuild closes and relaunches the affected app pair so native changes load. It ends that copy's live shell and Codex sessions. Save terminal work before changing Swift files while a watcher is running. A failed build leaves the current apps open and writes diagnostics under that copy's gridline_debug/build/.
-- start.sh runs gridline_debug/watch-build.sh in the foreground. The watcher builds both packages, packages Gridline.app and Gridline Debug.app, and opens one instance of each after a successful first build.
-- The watcher writes the live Gridline PID to that copy's gridline_debug/build/gridline.pid. Gridline Debug reads GridlineTargetBundleID and GridlineTargetPIDFile, resolves the sole live process for that bundle ID, refreshes the PID file, and refuses inspection if the match is ambiguous. Keep target bundle ID and PID file paired to the same copy.
-- gridline_versions/runtime-status.json lists numbered copies' Gridline PID, inspector PID, watcher PID, bundle IDs, and folder. Main diagnostics are in gridline_debug/build/; version diagnostics are in the matching version tree.
-- Do not start a second watcher when the target is already running. Let its watcher reload the apps.
+- Run `./start.sh` from the repository root.
+- It starts `gridline_debug/watch-build.sh` in the foreground.
+- The watcher downloads missing model resources, then builds Gridline and Gridline Debug.
+- After a successful build, it opens one matching app pair and watches source changes.
+- Changes to Swift code or skill scripts rebuild and relaunch the pair.
+- A successful rebuild ends that copy's live terminal sessions.
+- Keep the launcher terminal open; press Ctrl-C to stop the watcher.
+- Diagnostics are written to `gridline_debug/build/`.
+- Do not start a second watcher when the main pair is already running.
+
+## Gridline version lifecycle
+
+`./start_versions.sh` manages isolated copies under `gridline_versions/`.
+Each copy has its own `VERSION`, app bundle IDs, workspace data, logs, and watcher.
+
+### Create a version
+
+- Choose **Create** in `./start_versions.sh`.
+- The script chooses the first unused `version_N` folder.
+- It copies Gridline, Gridline Debug, the logo, and skill-script sources.
+- It skips build products, app bundles, debug logs, and model binaries.
+- It writes that version's `VERSION`, `README.md`, and `AGENTS.md` files.
+- It starts the new copy and downloads missing models into its own `skill_script/resources/models/`.
+- The version's build scripts use its `VERSION` to set unique app names and bundle IDs.
+
+### Debug an existing version
+
+- Choose **Debug** and select a listed version.
+- The manager starts that version's own `start.sh` and hot-reload watcher.
+- Press Ctrl-C to stop its watcher; use **Stop** to close its apps too.
+- The manager shows whether its apps and watcher are running.
+
+### Stop a version
+
+- Choose **Stop** and select the version.
+- The manager stops its watcher before closing that version's app pair.
+- Source files and version-specific saved data remain in its folder.
+
+## Shared stop and diagnostic commands
+
+- `./stop.sh` stops the main app pair and all numbered versions.
+- Each watcher writes its app PID and build diagnostics inside that copy's `gridline_debug/build/`.
+- `gridline_versions/runtime-status.json` summarizes version app and watcher state.
+- A failed build leaves the current apps open and records errors in that copy's build folder.
 
 ## Inspector permissions and diagnostic data
 

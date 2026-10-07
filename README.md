@@ -36,15 +36,12 @@ When extending Gridline's interface, reuse and extend its existing controls, spa
 Gridline is an open source macOS app. To build it from this repository, use macOS 13 or newer with Xcode Command Line Tools installed:
 
 ```sh
-git lfs install
 git clone https://github.com/reactnodejs322/gridline.git
 cd gridline
 ./start.sh
 ```
 
-Git LFS is required to download the bundled speech models under `skill_script/resources/models`. Install Git LFS before running these commands (for example, `brew install git-lfs` with Homebrew on macOS). If you already cloned the repository without Git LFS, run `git lfs pull` from the repository directory to fetch the model files.
-
-The first build downloads SwiftTerm through Swift Package Manager. `start.sh` builds and opens Gridline and its companion Gridline Debug inspector, then keeps a watcher running in the terminal. Install the Codex CLI separately to start Codex sessions.
+The first build downloads the speech models into `skill_script/resources/models` and SwiftTerm through Swift Package Manager. Model versions are pinned and their hashes verified; the models are ignored by Git. `start.sh` builds and opens Gridline and its companion Gridline Debug inspector, then keeps a watcher running in the terminal. Install the Codex CLI separately to start Codex sessions.
 
 Gridline Debug uses macOS Accessibility permission to inspect Gridline’s interface. The inspector does not read terminal text or keystrokes. You can also build just Gridline with `./gridline/build-app.sh` and open `gridline/Gridline.app`.
 

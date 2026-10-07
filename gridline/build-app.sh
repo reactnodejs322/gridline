@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 CONFIGURATION="${1:-release}"
+echo "Preparing skill_script model resources…"
+python3 ../skill_script/download_models.py
 VERSION_LABEL=""
 VERSION_NUMBER=""
 BUNDLE_ID="local.gridline.terminal"

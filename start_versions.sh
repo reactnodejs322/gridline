@@ -127,6 +127,14 @@ create_version() {
   rsync -a --exclude='/.build/' --exclude='/*.app/' "$ROOT/gridline/" "$destination/gridline/"
   rsync -a --exclude='/Inspector/.build/' --exclude='/*.app/' --exclude='/events.jsonl' --exclude='/build/' --exclude='/reports/*' "$ROOT/gridline_debug/" "$destination/gridline_debug/"
   rsync -a "$ROOT/logo/" "$destination/logo/"
+  rsync -a \
+    --include='/resources/models/' \
+    --include='/resources/models/**/' \
+    --include='/resources/models/**/*.md' \
+    --include='/resources/models/**/LICENSE' \
+    --include='/resources/models/**/config.json' \
+    --exclude='/resources/models/**' \
+    "$ROOT/skill_script/" "$destination/skill_script/"
   cp "$ROOT/start.sh" "$destination/start.sh"
   cat > "$destination/AGENTS.md" <<VERSION_AGENTS
 # Coding instructions for $label
