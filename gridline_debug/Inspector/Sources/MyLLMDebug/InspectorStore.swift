@@ -12,6 +12,13 @@ final class InspectorStore: ObservableObject {
     @Published var selectionIsClick = false
     @Published var clicks: [InspectorEvent] = []
     @Published var appEvents: [String] = []
+    @Published var eventFilter = ""
+    @Published var eventCategoryFilter = "terminal.ioTrace"
+    @Published private(set) var terminalInputEvents: [String] = []
+    @Published private(set) var terminalIOTraceEvents: [String] = []
+    @Published private(set) var featureEvents: [String] = []
+    @Published private(set) var focusedTerminal: FocusedTerminalDebug?
+    @Published private(set) var workgroupNames: [String: String] = [:]
     @Published var copyStatus = ""
     @Published var buildStatus = "No build has been recorded yet."
     @Published var buildErrors = ""
@@ -21,8 +28,7 @@ final class InspectorStore: ObservableObject {
     private var tapSource: CFRunLoopSource?
     private var changeWatcher: AXChangeWatcher?
     private var watchedPID: pid_t?
-    private var lastHoverUpdate = Date.distantPast
-    private var hoverGeneration = 0
+    private var accessibilityLookupInProgress = false
     private var permissionTimer: Timer?
     private let hoverHighlight = HoverHighlight()
 
@@ -81,8 +87,7 @@ final class InspectorStore: ObservableObject {
             inspectionStatus = "Accessibility permission is not active for this inspector process yet. Toggle it off and on, then use Check permission again."
             return
         }
-        let mask = (1 << CGEventType.mouseMoved.rawValue)
-            | (1 << CGEventType.leftMouseDown.rawValue)
+        let mask = (1 << CGEventType.leftMouseDown.rawValue)
             | (1 << CGEventType.rightMouseDown.rawValue)
         let pointer = Unmanaged.passUnretained(self).toOpaque()
         eventTap = CGEvent.tapCreate(
@@ -106,7 +111,7 @@ final class InspectorStore: ObservableObject {
         if let tapSource { CFRunLoopAddSource(CFRunLoopGetMain(), tapSource, .commonModes) }
         CGEvent.tapEnable(tap: eventTap, enable: true)
         isInspecting = true
-        inspectionStatus = "Pointer monitor is active. Hover or click a control in Gridline."
+        inspectionStatus = "Pointer monitor is active. Click a control in Gridline to inspect it."
         refreshLogs()
     }
 
@@ -155,15 +160,100 @@ final class InspectorStore: ObservableObject {
     func refreshLogs() {
         let eventURL = debugDirectory.appendingPathComponent("events.jsonl")
         if let content = try? String(contentsOf: eventURL, encoding: .utf8) {
-            appEvents = Array(content.split(separator: "\n").suffix(35).map(String.init))
+            let lines = content.split(separator: "\n").map(String.init)
+            appEvents = Array(lines.suffix(100))
+            terminalInputEvents = Array(lines.filter { eventName(in: $0) == "terminal.inputSubmitted" }.suffix(100))
+            terminalIOTraceEvents = Array(lines.filter {
+                eventName(in: $0) == "terminal.inputSubmitted" || hasSubmissionID(in: $0)
+            }.suffix(200))
+            featureEvents = Array(lines.filter { eventFeature(in: $0) != nil }.suffix(200))
+            focusedTerminal = lines.reversed().compactMap(FocusedTerminalDebug.init(eventLine:)).first
+        } else {
+            appEvents = []
+            terminalInputEvents = []
+            terminalIOTraceEvents = []
+            featureEvents = []
+            focusedTerminal = nil
         }
+        workgroupNames = loadWorkgroupNames()
         let statusURL = debugDirectory.appendingPathComponent("build/latest-status.json")
         if let data = try? Data(contentsOf: statusURL),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
             buildStatus = "\(json["status"] ?? "unknown") · \(json["time"] ?? "") · \(json["target"] ?? "")"
+        } else {
+            buildStatus = "No build has been recorded yet."
         }
         let summaryURL = debugDirectory.appendingPathComponent("build/latest-errors.txt")
         buildErrors = (try? String(contentsOf: summaryURL, encoding: .utf8)) ?? ""
+    }
+
+    var filteredAppEvents: [String] {
+        let query = eventFilter.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source: [String]
+        switch eventCategoryFilter {
+        case "terminal.inputSubmitted": source = terminalInputEvents
+        case "terminal.ioTrace": source = terminalIOTraceEvents
+        case "TERMINAL_HEADER": source = featureEvents.filter { eventFeature(in: $0) == eventCategoryFilter }
+        case "workspace.terminalUsageStatusChanged": source = appEvents.filter { eventName(in: $0) == eventCategoryFilter }
+        case "runtime.failures": source = appEvents.filter(isRuntimeFailure)
+        default: source = appEvents
+        }
+        guard !query.isEmpty else { return source }
+        return source.filter { line in
+            if line.localizedCaseInsensitiveContains(query) { return true }
+            guard let data = line.data(using: .utf8),
+                  let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let details = event["details"] as? [String: String],
+                  let groupID = details["groupID"],
+                  let name = workgroupNames[groupID] else { return false }
+            return name.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    func copyRecentLogs() {
+        refreshLogs()
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(filteredAppEvents.suffix(100).joined(separator: "\n"), forType: .string)
+        copyStatus = "Copied the latest filtered safe Gridline events."
+    }
+
+    private func eventName(in line: String) -> String? {
+        guard let data = line.data(using: .utf8),
+              let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return event["event"] as? String
+    }
+
+    private func eventFeature(in line: String) -> String? {
+        guard let data = line.data(using: .utf8),
+              let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let details = event["details"] as? [String: String] else { return nil }
+        return details["feature"]
+    }
+
+    private func hasSubmissionID(in line: String) -> Bool {
+        guard let data = line.data(using: .utf8),
+              let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let details = event["details"] as? [String: String] else { return false }
+        return details["submissionID"] != nil
+    }
+
+    private func isRuntimeFailure(_ line: String) -> Bool {
+        guard let data = line.data(using: .utf8),
+              let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        let name = event["event"] as? String ?? ""
+        let details = event["details"] as? [String: String] ?? [:]
+        return name.localizedCaseInsensitiveContains("failed") || details["status"] == "failed"
+    }
+
+    private func loadWorkgroupNames() -> [String: String] {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Gridline", isDirectory: true)
+        let version = Bundle.main.object(forInfoDictionaryKey: "GridlineVersionLabel") as? String
+        let directory = version.map { support.appendingPathComponent($0, isDirectory: true) } ?? support
+        let url = directory.appendingPathComponent("workspace.json")
+        guard let data = try? Data(contentsOf: url),
+              let workspace = try? JSONDecoder().decode(DebugWorkspaceNames.self, from: data) else { return [:] }
+        return Dictionary(uniqueKeysWithValues: workspace.groups.map { ($0.id, $0.name) })
     }
 
     func saveReport() throws -> URL {
@@ -183,7 +273,7 @@ final class InspectorStore: ObservableObject {
         let report = """
         # Gridline UI element context
 
-        **Selection:** \(selectionIsClick ? "Clicked in Gridline" : "Hovered or manually pinned")
+        **Selection:** \(selectionIsClick ? "Clicked in Gridline" : "Pinned selection")
 
         ## Selected element
 
@@ -249,21 +339,19 @@ final class InspectorStore: ObservableObject {
     }
 
     private func receive(_ type: CGEventType) {
-        guard isInspecting else { return }
-        inspectionStatus = "Pointer events are arriving; move over or click a Gridline control."
-        if type == .mouseMoved, Date().timeIntervalSince(lastHoverUpdate) < 0.12 { return }
-        lastHoverUpdate = Date()
-        hoverGeneration += 1
-        let generation = hoverGeneration
+        guard isInspecting,
+              !accessibilityLookupInProgress,
+              type == .leftMouseDown || type == .rightMouseDown else { return }
         let point = DebugElement.currentAXPoint()
+        guard DebugElement.isTargetApplication(at: point) else { return }
+        accessibilityLookupInProgress = true
         Task { @MainActor [weak self] in
-            let element = await Task.detached(priority: .userInitiated) { DebugElement.atPoint(point) }.value
+            let element = await Task.detached(priority: .utility) { DebugElement.atPoint(point) }.value
             guard let self else { return }
-            if generation == self.hoverGeneration || type == .leftMouseDown || type == .rightMouseDown {
-                self.hoverHighlight.show(element)
-                if element != nil, element?.highlightFrame == nil {
-                    self.inspectionStatus = "Found the Gridline element, but macOS did not provide its screen bounds for the highlight."
-                }
+            self.accessibilityLookupInProgress = false
+            if element != self.hovered { self.hoverHighlight.show(element) }
+            if element != nil, element?.highlightFrame == nil {
+                self.inspectionStatus = "Found the Gridline element, but macOS did not provide its screen bounds for the highlight."
             }
             if let element, (type == .leftMouseDown || type == .rightMouseDown) {
                 self.hovered = element
@@ -273,8 +361,8 @@ final class InspectorStore: ObservableObject {
                 self.addClick(element, kind: type == .leftMouseDown ? "left click" : "right click", detail: "Gridline control clicked")
             } else if element == nil, type == .leftMouseDown || type == .rightMouseDown {
                 self.inspectionStatus = "Click received, but Gridline did not expose an Accessibility element at that point. Make sure the pointer is over the Gridline window."
-            } else if generation == self.hoverGeneration {
-                self.hovered = element
+            } else if type == .leftMouseDown || type == .rightMouseDown {
+                self.inspectionStatus = "Click received, but Gridline did not expose an Accessibility element at that point. Make sure the pointer is over the Gridline window."
             }
         }
     }
@@ -298,6 +386,36 @@ final class InspectorStore: ObservableObject {
     }
 }
 
+private struct DebugWorkspaceNames: Decodable {
+    struct Group: Decodable {
+        let id: String
+        let name: String
+    }
+    let groups: [Group]
+}
+
+struct FocusedTerminalDebug: Identifiable {
+    let sessionID: String
+    let groupID: String
+    let kind: String
+    let time: String
+    var id: String { sessionID }
+
+    init?(eventLine: String) {
+        guard let data = eventLine.data(using: .utf8),
+              let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              event["event"] as? String == "terminal.targeted",
+              let details = event["details"] as? [String: String],
+              let sessionID = details["session"],
+              let groupID = details["groupID"],
+              let kind = details["kind"] else { return nil }
+        self.sessionID = sessionID
+        self.groupID = groupID
+        self.kind = kind
+        self.time = event["time"] as? String ?? ""
+    }
+}
+
 private struct StructuredIssue: Codable {
     let createdAt: Date
     let selectionIsClick: Bool
@@ -312,5 +430,5 @@ private struct StructuredIssue: Codable {
 
 enum ReportError: LocalizedError {
     case noElement
-    var errorDescription: String? { "Hover over or pin an element before saving a report." }
+    var errorDescription: String? { "Click or pin an element before saving a report." }
 }

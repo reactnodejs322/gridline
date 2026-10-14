@@ -5,3 +5,7 @@ Gridline's original source code, documentation, and project artwork are © 2026 
 The **Gridline** name and logo identify this project. The software license does not grant trademark rights or permission to present another project as an official Gridline release or imply endorsement. Forks should identify their changes and use distinct project branding.
 
 Third-party dependencies and assets retain their own copyright notices and license terms.
+
+## Vendored hook sources
+
+`hook_vendor/ponytail/` contains Ponytail v5.2.0 from DietrichGebert/ponytail, licensed under MIT. Its license is preserved at `hook_vendor/ponytail/LICENSE`. Gridline's project hook adapter is in `gridline/hooks/`.

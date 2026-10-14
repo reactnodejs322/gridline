@@ -47,6 +47,23 @@ struct DebugElement: Codable, Identifiable, Equatable {
     }
 
     @MainActor
+    static func isTargetApplication(at point: CGPoint) -> Bool {
+        guard let targetPID = targetProcessIdentifier,
+              let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else {
+            return false
+        }
+        for window in windows {
+            guard (window[kCGWindowLayer as String] as? Int ?? 0) == 0,
+                  let rawBounds = window[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: rawBounds as CFDictionary),
+                  bounds.contains(point),
+                  let ownerPID = window[kCGWindowOwnerPID as String] as? pid_t else { continue }
+            return ownerPID == targetPID
+        }
+        return false
+    }
+
+    @MainActor
     var highlightFrame: CGRect? {
         guard axFrame.width > 1, axFrame.height > 1,
               let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero }) ?? NSScreen.main else { return nil }
@@ -60,6 +77,9 @@ struct DebugElement: Codable, Identifiable, Equatable {
 
     static func atPoint(_ point: CGPoint) -> DebugElement? {
         let system = AXUIElementCreateSystemWide()
+        // SwiftUI hit-testing can stall while the target app lays out its AX tree.
+        // Bound the synchronous query so a single click cannot hang the inspector.
+        AXUIElementSetMessagingTimeout(system, 1.0)
         var raw: AXUIElement?
         guard AXUIElementCopyElementAtPosition(system, Float(point.x), Float(point.y), &raw) == .success,
               let raw, let element = snapshot(raw) else { return nil }

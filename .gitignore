@@ -10,9 +10,17 @@
 
 # Gridline Debug runtime events, reports, and build diagnostics
 **/events.jsonl
+**/timeline.jsonl
+gridline_debug/user-log-view.json
 **/build/
 **/reports/*
 !**/reports/.gitkeep
+/hot-reload-logs.md
+**/__pycache__/
+**/hook_vendor/ponytail/
+**/hook_vendor/.ponytail-upstream/
+**/hook_vendor/.ponytail-stage-*/
+**/hook_vendor/.ponytail-previous/
 
 # Model assets for every skill are fetched into resources/models by setup scripts.
 **/resources/models/**

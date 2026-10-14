@@ -7,8 +7,8 @@
 | File | Responsibility |
 | --- | --- |
 | `MainTemplateDefinition.swift` | Defines the stable ID `main_template`, display name `Main`, palette values, and factories for the work-group card and top usage status. |
-| `MainTemplateWorkGroupCard.swift` | Defines the colored work-group terminal tile, compact label row, and terminal-action dropdown. |
-| `MainTemplateUsageStatusView.swift` | Renders separate cyan weekly provider meters from shared snapshots; ChatGPT uses the reported allowance and Claude uses its rolling seven-day estimate. Its ChatGPT dropdown preserves the meter and offers fetching controls. |
+| `MainTemplateWorkGroupCard.swift` | Defines the colored work-group terminal tile, model/IN-OUT-TOTAL usage label, usage-details popover, and terminal-action dropdown. |
+| `MainTemplateUsageStatusView.swift` | Renders separate cyan weekly provider meters from shared snapshots; ChatGPT uses the reported allowance and Claude uses its rolling seven-day estimate. Its ChatGPT dropdown preserves the meter and offers allowance controls plus one global per-terminal usage control that pauses monitoring and hides/shows the IN/OUT rows in every workgroup. |
 | `MainTemplateDropdownPanel.swift` | Reusable palette-aware dropdown panel shell. Skill scripts, workspace controls, directory prompt, work-group actions, and usage settings share its bordered surface. |
 | `MainTemplateDropdownActionRow.swift` | Reusable hoverable action row for dropdown panels, with a title, optional subtitle, icon, stable Accessibility ID, and action. |
 | `../TemplateCatalog.swift` | Defines the descriptor, palette/context contracts, catalog, and selected-template preference. Registration happens in `GridlineTemplateCatalog.all`. |
@@ -21,6 +21,9 @@
 3. The active template's `makeWorkGroupCard` factory builds `MainTemplateWorkGroupCard` and passes that shared context through.
 4. The card uses the palette for visual styling and calls the shared store/model for user actions. The view does not create or persist duplicate group/session data.
 5. `MainTemplateUsageStatusView` renders the two weekly meters. ChatGPT's percentage is the reported weekly plan allowance; its dollar figure is that percentage of the stated $20 plan price. Claude's weekly API-equivalent estimate is compared with a $20 reference. Neither is a subscription charge; provider parsing and process detection remain in the shared Gridline service.
+6. Per-terminal usage arrives as `TerminalUsageStatus` snapshots through the work-group context. The card displays compact model, input, output, total, and API-equivalent estimate data; the details popover shows cache and reasoning counts. One checkbox in the usage popover pauses monitoring and hides the IN/OUT row in every workgroup; re-enabling shows the row and resumes monitoring.
+
+The work-group header shows the group name and per-terminal usage. Keep the project folder and auto-generated terminal title out of this compact header; folder and rename actions remain in the work-group menu.
 
 The current main template renders a tight three-column grid of work-group terminal tiles with stable, distinct accent borders. Each tile puts the work-group name and terminal label in one compact header and fills the remaining area with its shared terminal pane. Group collapse, folder selection, session creation, terminal label editing, font zoom, and close actions remain in the tile's shared-style action dropdown or inline label editor. The shared terminal-height resize handle remains attached to each pane. An empty group can start a Codex session.
 

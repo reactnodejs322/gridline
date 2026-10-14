@@ -15,6 +15,11 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+try:
+    from gridline_trace import stage as trace_stage
+except ImportError:
+    def trace_stage(*args, **kwargs) -> None:
+        return None
 
 LOG_ROOT = Path.home() / ".codex" / "sessions"
 USAGE_KEYS = (
@@ -44,6 +49,7 @@ def read_default_settings() -> tuple[str, str]:
 
 class AppServer:
     def __init__(self) -> None:
+        trace_stage("codex_allowance", "connect_app_server", "started")
         codex = shutil.which("codex")
         if not codex:
             raise RuntimeError("Codex CLI was not found in PATH.")
@@ -69,6 +75,7 @@ class AppServer:
             timeout=20,
         )
         self.notify("initialized", {})
+        trace_stage("codex_allowance", "connect_app_server", "completed")
 
     def send(self, message: dict) -> None:
         if self.process.poll() is not None:
@@ -473,6 +480,7 @@ def main() -> int:
         parser.error("--watch-json cannot be combined with --once or --json")
 
     model, effort = read_default_settings()
+    trace_stage("codex_allowance", "read_settings", "completed")
     stop = threading.Event()
     usage_snapshot = UsageSnapshot()
     current_path: Path | None = None
@@ -532,6 +540,7 @@ def main() -> int:
     except KeyboardInterrupt:
         return 0
     except (OSError, RuntimeError, json.JSONDecodeError) as exc:
+        trace_stage("codex_allowance", "read_allowance", "failed", exc)
         print(f"Could not read Codex usage: {exc}", file=sys.stderr)
         print("Try updating Codex, then run `codex /status` or open Settings → Usage.", file=sys.stderr)
         return 1

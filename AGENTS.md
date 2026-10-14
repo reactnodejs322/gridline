@@ -5,6 +5,18 @@
 Start with this map, then open one relevant index or source file.
 This guide is the technical handoff; README.md is for people exploring Gridline.
 
+## Quick reference: inspect the logs currently shown in Gridline Debug
+
+When the user asks you to look at their Gridline logs, run this from the repository root:
+
+~~~sh
+./gridline_debug/inspect-logs.sh showUserlogFilters --format llm
+~~~
+
+This reads Gridline Debug's live **Show**, **Workgroup**, and **Search** selections from `gridline_debug/user-log-view.json`, then prints matching timeline rows as structured JSON, including recorded details and each Swift/Python code-path step expanded to its repo-relative file location. The Debug app refreshes that state when a filter changes or the timeline updates, so this command follows the user's current view instead of assuming `--category all`. It also reports whether the Debug window is open and whether **Following** is on. By default it prints the latest 30 matching rows; append `--limit 0` to print every match. Use `--format text` for compact log lines with readable code paths.
+
+When the user asks to see the full latest log output, run `./gridline_debug/inspect-logs.sh showUserlogFilters --format text --limit N` (for example, `--limit 50`) and paste the complete command output without summarizing it. `--limit` counts matching log entries, not physical display lines; the command returns fewer if fewer entries match. Use `--format llm` when structured JSON is useful for analysis. See [Inspector permissions and diagnostic data](#inspector-permissions-and-diagnostic-data) for details and independent-filter commands.
+
 ## Table of Contents
 
 | Chapter | Section | What to find |
@@ -45,7 +57,9 @@ Run these commands from the repository root on macOS, Linux, or Windows. `rg` (r
 | Where the selected skin enters the workspace | `rg -n 'activeTemplate|makeWorkGroupCard|gridline\.template\.active' gridline/Sources/Gridline/Workspace.swift` | `gridline/Sources/Gridline/Workspace.swift` |
 | Template Accessibility IDs and inspector mapping | `rg -n 'gridline\.(template|group|session)\.' gridline/template gridline_debug/INDEX.md gridline_debug/Inspector/Sources/MyLLMDebug/GridlineCodeContext.swift` | Template Swift views and `gridline_debug/` |
 | Template source inclusion and live reload | `rg -n 'template/|main_template' gridline/Package.swift gridline_debug/watch-build.sh` | `gridline/Package.swift`, `gridline_debug/watch-build.sh` |
-| Provider usage readers, estimates, and terminal detection | `rg -n 'ProviderUsageStatus|detectProviders|APIEquivalent|CodexCostEstimate|ClaudeCostEstimate' gridline/Sources/Gridline/ProviderUsageService.swift gridline/usage` | `gridline/Sources/Gridline/ProviderUsageService.swift`, `gridline/usage/` |
+| Provider usage readers, estimates, per-terminal snapshots, and terminal detection | `rg -n 'ProviderUsageStatus|TerminalUsageStatus|TerminalUsageSnapshot|terminal_usage|detectProviders' gridline/Sources/Gridline/ProviderUsageService.swift gridline/usage` | `gridline/Sources/Gridline/ProviderUsageService.swift`, `gridline/usage/` |
+| Codex project hooks, live terminal folder, Ponytail installer | `rg -n 'CodexHooksPanel|install_project_hooks|PreCompact|PostCompact|currentDirectory' gridline/Sources/Gridline gridline/hooks` | `gridline/Sources/Gridline/CodexHooks.swift`, `gridline/hooks/`, `hook_vendor/ponytail/` |
+| Shared Ponytail source update | `rg -n 'PonytailVendorUpdate|update_ponytail_vendor|ponytailSource' gridline/Sources/Gridline gridline/hooks gridline/template` | `Workspace.swift`, `CodexHooks.swift`, `gridline/hooks/update_ponytail_vendor.py`, `hook_vendor/ponytail/VENDOR_VERSION` |
 | Provider usage status presentation | `rg -n 'MainTemplateUsageStatusView|makeUsageStatusView|gridline.workspace.tokenUsage' gridline/template gridline/Sources/Gridline/Workspace.swift` | `gridline/template/main_template/MainTemplateUsageStatusView.swift` |
 | Terminal labels, zoom, resizing, and saved state | `rg -n 'func rename|func zoom|resizeTerminal|workspace\.json|class TerminalSession' gridline/Sources/Gridline/Workspace.swift` | `gridline/Sources/Gridline/Workspace.swift` |
 | A control or workflow in the main app | `rg -n -i 'SEARCH WORDS|gridline\.identifier' gridline/Sources/Gridline gridline_debug/INDEX.md` | Start with the match, then inspect its containing Swift file |
@@ -126,6 +140,8 @@ Main and versioned copies have separate app identities and runtime data.
 - gridline_debug/ contains the companion inspector, its Swift package, INDEX.md, behavior logs, reports, and build diagnostics.
 - gridline_research/ contains product and repository research, including comparisons with other terminal projects.
 - `gridline/usage/` contains Gridline's bundled, reusable provider usage readers and estimates; keep any external reference implementation copied here before integration.
+- `hook_vendor/ponytail/` is an ignored prepared copy of the upstream Ponytail source and license. Each copy's `start.sh` runs `gridline/hooks/update_ponytail_vendor.py ensure` before building, cloning upstream only when the prepared source is missing. The map helper has one Gridline adaptation that excludes `.codex/`; provider-specific Gridline hook adapters live in `gridline/hooks/`.
+- `gridline/runtime/gridline_trace.py` is the shared safe Python stage logger; `DebugEvents.configurePythonProcess` in `gridline/Sources/Gridline/DebugEvents.swift` bridges its records into Gridline Debug. Use `recordExternalProcess` for Swift-launched native commands such as `ps` so they are not mislabeled as Python scripts.
 - `skill_script/` contains selectable local-processing skills and their setup script.
 - logo/Gridline2x.png is the shared editable logo source. The inspector build generates its bug-badge variant from this file.
 - The root contains README.md, this AGENTS.md, start.sh, start_versions.sh, and stop.sh.
@@ -144,7 +160,7 @@ Main and versioned copies have separate app identities and runtime data.
 - Keep Gridline code in `gridline/` and inspector code in `gridline_debug/`.
 - Put cross-app build coordination in root launchers or the watcher.
 - Preserve stable Accessibility identifiers and semantic events.
-- Never log terminal text, keystrokes, credentials, or control values.
+- Never log terminal output, individual keystrokes, credentials, or arbitrary control values. While the paired Gridline Debug inspector is open, terminal targeting, completed Enter submissions, and per-terminal usage diagnostics may include the saved workgroup name beside its UUID. The `terminal.inputSubmitted` event in `events.jsonl` keeps only character counts; by the user's explicit request, a completed Codex prompt is written separately to the local, Git-ignored `gridline_debug/timeline.jsonl` with the same submission ID. Never put prompt text in `events.jsonl`, inspector reports, or terminal-derived titles.
 - Keep implementation guidance here and user-facing copy in `README.md`.
 - If a user points to a script or implementation outside this repository, treat it as reference material and copy the needed logic into `gridline/` before integrating it. Do not edit the outside source unless explicitly asked.
 
@@ -182,10 +198,15 @@ To trace a new dropdown, start at its trigger and `@State` in the table, follow 
 
 - Keep provider data collection and calculations separate from SwiftUI. Reusable service/state types belong in `gridline/Sources/Gridline/`; local Python readers and calculators belong in `gridline/usage/`.
 - Python usage tools emit machine-readable JSON and read provider usage metadata only. They must not read or retain prompts, terminal output, keystrokes, or credentials.
+- Per-terminal usage snapshots retain the last confirmed counts through temporary pending, ambiguous, unavailable, or no-provider polls. Clear that cached display only when the Gridline terminal process identity changes or the session is removed; keep reader status diagnostics visible while retaining.
 - Pricing maintenance instructions and official rate-card links are in `gridline/usage/README.md`. Rate maps are local snapshots, not live page scrapes; a coding LLM must verify current official rates before changing them and leave unknown model rates unpriced.
 - The top status has two weekly meters. ChatGPT uses the monitor's reported seven-day plan allowance; the dollar display is that percentage of the stated $20 plan price. Its header dropdown controls a persistent allowance-monitor process, defaults to a three-second interval, supports intervals from one second to sixty minutes, and can disable continuous fetching while retaining the last snapshot. Claude uses a rolling seven-day API-equivalent estimate from assistant token metadata, compared with a $20 reference. Neither amount is a subscription charge; never substitute Claude's lifetime aggregate cost for its weekly estimate.
 - Bundle `gridline/usage/` into the Gridline app in `gridline/build-app.sh` and include it in the hot-reload fingerprint in `gridline_debug/watch-build.sh`.
+- Bundle `gridline/hooks/` and the small Ponytail resources needed at runtime in `gridline/build-app.sh`; include them in the watcher fingerprint. The Codex project installer writes under the live terminal's Git root (or its live folder outside Git), merges `.codex/hooks.json`, and preserves an existing `.codex/ponytail.md`.
+- Bundle `gridline/runtime/` beside the usage tools in the app resources and include it in the watcher fingerprint. New Swift-launched Python work should use `DebugEvents.configurePythonProcess`; Python scripts emit named stages through `gridline/runtime/gridline_trace.py`.
 - Swift services call the bundled tools, normalize output into typed snapshots, and own refresh timing and process-name detection. Keep provider parsing, price math, and process scanning out of `WorkspaceView` and template views.
+- Per-terminal usage is separate from the weekly header meter. `TerminalUsageStatus` streams `gridline/usage/terminal_usage.py` snapshots every three seconds; the script matches active CLI processes to provider session files. UI focus never assigns usage. When candidates are shared, a completed Enter submission can pin a file only if that file updates after the submission and no competing terminal submits before the update; otherwise leave it ambiguous. The reader receives only a terminal ID and timestamp, never submitted text or character content. With Gridline Debug open, `workspace.terminalUsageSubmissionForwarded` confirms the Swift-to-Python handoff and `workspace.terminalUsageStatusChanged` reports the reader's submission resolution. The single `gridline.workspace.terminalUsage.disable` checkbox pauses this local watcher for all terminals, preserves in-memory snapshots, and hides the per-terminal IN/OUT rows across all workgroups. The custom interval only controls weekly allowance polling.
+- Debug-only diagnostics are written only while the matching Gridline Debug app is open. This includes `terminal.targeted` and `terminal.inputSubmitted` (session/workgroup UUID, saved workgroup name, and terminal kind) plus per-terminal usage status and reader failure events (`workspace.terminalUsageStatusChanged`, `workspace.terminalUsageMonitorFailed`). Enter events count inserted and pasted characters separately, not PTY bytes or terminal control traffic; they never store the text in `events.jsonl`. The ignored `gridline_debug/timeline.jsonl` is the one explicit exception for completed Codex prompt text. Usage events include the workgroup name, cumulative session IN/OUT/TOTAL, latest Codex turn IN/OUT, provider row counts, and a source/function pipeline so a developer can see what the Python reader returned and where it stopped. Never log exception messages, local paths, terminal output, or title text in runtime events.
 - Templates own presentation. Add a factory to `GridlineTemplate` for a new template-owned surface, then render it in the template folder. Pass typed snapshots to the view; do not duplicate data logic for each skin.
 - `MainTemplateDropdownActionRow` lives in its own file at `gridline/template/main_template/MainTemplateDropdownActionRow.swift`, beside `MainTemplateDropdownPanel.swift`; each type has a separate Swift source file for easy discovery.
 - For a dropdown/popover in the main template, reuse `gridline/template/main_template/MainTemplateDropdownPanel.swift`: `MainTemplateDropdownPanel` is the palette-aware shell, and `MainTemplateDropdownActionRow` is the matching hoverable action row. Read `gridline/template/main_template/README.md` for its uses; search `rg -n 'MainTemplateDropdownPanel|MainTemplateDropdownActionRow' gridline/template gridline/Sources/Gridline` before building a new dropdown style.
@@ -196,8 +217,8 @@ To trace a new dropdown, start at its trigger and `@State` in the table, follow 
 
 - Gridline is a native macOS workspace for organizing parallel Codex CLI work. A named work group represents a task or project, keeps its project folder visible, and can be collapsed or selected from the sidebar.
 - The current UI starts one Codex terminal in an empty work group. Do not describe multiple terminals per group or user-created shell sessions as current UI behavior unless the implementation changes.
-- The workspace has one, two, or three group columns. It saves group names, folders, collapse state, terminal labels, per-terminal font size and height, and layout metadata in ~/Library/Application Support/Gridline/workspace.json (numbered copies scope their saved data to their version). Terminals start at 10 pt and can zoom down to 6 pt; their pane heights resize independently.
-- Saved workspace metadata is not a saved process. Quitting or rebuilding ends live shell/Codex PTYs; reopening creates fresh terminal processes.
+- The workspace has one, two, or three group columns. It saves group names, folders, collapse state, terminal labels, each terminal's last working directory, per-terminal font size and height, and layout metadata in ~/Library/Application Support/Gridline/workspace.json (numbered copies scope their saved data to their version). Terminals start at 10 pt and can zoom down to 6 pt; their pane heights resize independently.
+- Saved workspace metadata is not a saved process. Quitting or rebuilding ends live shell/Codex PTYs; reopening creates fresh terminal processes in each terminal's last working directory, and Codex terminals launch a fresh Codex session there.
 - Session labels begin with a short label such as Codex. A terminal title event may update an automatic label. A user-edited label takes precedence. Do not infer a task title when the CLI has not sent one.
 - The workspace directory prompt supports its documented cd, pwd, and ls interactions, folder completion, and folder navigation. It validates paths and does not execute arbitrary shell commands. New groups and sessions use the saved default folder.
 - Gridline Debug is a separate native app. Its listen-only pointer monitor examines Accessibility elements from the paired Gridline process. Hover previews and outlines an element; clicking pins it and records a selection.
@@ -212,9 +233,12 @@ The compact, maintained mapping from identifiers to likely implementation files 
 - Main template palette, work-group card, and terminal-label presentation: gridline/template/main_template/.
 - Main template reusable dropdown surface/action row: `gridline/template/main_template/MainTemplateDropdownPanel.swift` and `gridline/template/main_template/MainTemplateDropdownActionRow.swift`; used by workspace controls, directory and skill-script popovers, work-group actions, and usage settings.
 - Provider process detection, refresh scheduling, and typed snapshots: `gridline/Sources/Gridline/ProviderUsageService.swift`; bundled Codex and Claude readers: `gridline/usage/`.
+- Per-terminal token counts and API-equivalent estimates: `TerminalUsageStatus` in `gridline/Sources/Gridline/ProviderUsageService.swift` streams `gridline/usage/terminal_usage.py`; the workgroup header presents the typed snapshot. `gridline.workspace.terminalUsage.disable` in the usage popover pauses the watcher and hides/shows every workgroup's IN/OUT row.
+- Shared Ponytail vendor updates: **Workspace controls → Ponytail source…** → confirmation → `PonytailVendorUpdateModel` in `gridline/Sources/Gridline/CodexHooks.swift` → `gridline/hooks/update_ponytail_vendor.py`, which runs `git pull --ff-only` only in `hook_vendor/.ponytail-upstream` and refreshes ignored `hook_vendor/ponytail/`. It never pulls Gridline's own repo. First-start bootstrap uses `ensure` and does not pull when a prepared copy already exists.
+- Codex hook setup and compaction rows: each work group's **ellipsis → Project hooks…** → `CodexHooksPanel` in `gridline/Sources/Gridline/CodexHooks.swift` → `gridline/hooks/install_project_hooks.py`; setup writes `.codex/hooks.json` and `.codex/ponytail.md` under that group's live terminal Git root or saved folder. An installed Ponytail project shows its small vendored icon left of the group ellipsis; clicking it opens an editor for that group's `.codex/ponytail.md` in `gridline/template/main_template/MainTemplatePonytailDocumentViewer.swift`, and Save writes changes back to that file. The card inspects the active terminal folder and rechecks when the folder or hooks panel changes. Live shell cwd is tracked on `TerminalSession.currentDirectory` and persisted per session as `SavedSession.workingDirectory` in `gridline/Sources/Gridline/Workspace.swift`; a restarted Codex terminal opens a fresh Codex session in that folder. Project `PreCompact`/`PostCompact` events go through `gridline/hooks/gridline_codex_hook.py` into `events.jsonl`; the hook drops prompt, transcript, and cwd fields and writes only while the paired Debug log view is active.
 - Provider status presentation: `gridline/template/main_template/MainTemplateUsageStatusView.swift`, called through `GridlineTemplate.makeUsageStatusView`.
 - Semantic app event schema and path: gridline/Sources/Gridline/DebugEvents.swift.
-- Inspector selection, hover, copy, and reports: gridline_debug/Inspector/Sources/MyLLMDebug/InspectorStore.swift and InspectorView.swift.
+- Inspector selection, hover, copy, and reports: gridline_debug/Inspector/Sources/MyLLMDebug/InspectorStore.swift and InspectorView.swift. Full-width live logs: DebugTimelineStore.swift and DebugTimelineView.swift in the same folder.
 - Accessibility hit-test fields: gridline_debug/Inspector/Sources/MyLLMDebug/DebugElement.swift.
 - Accessibility identifier to likely Swift action/event map and copied context: gridline_debug/Inspector/Sources/MyLLMDebug/GridlineCodeContext.swift.
 - Non-interactive hover border overlay: gridline_debug/Inspector/Sources/MyLLMDebug/HoverHighlight.swift.
@@ -227,7 +251,7 @@ Per-terminal controls also use `gridline.session.zoomOut.<UUID>`, `gridline.sess
 ## Start the main app
 
 - Run `./start.sh` from the repository root.
-- It starts `gridline_debug/watch-build.sh` in the foreground.
+- It prepares Ponytail in the ignored `hook_vendor/ponytail/` folder if needed, then starts `gridline_debug/watch-build.sh` in the foreground.
 - The watcher downloads missing model resources, then builds Gridline and Gridline Debug.
 - After a successful build, it opens one matching app pair and watches source changes.
 - Changes to Swift code or skill scripts rebuild and relaunch the pair.
@@ -246,6 +270,7 @@ Each copy has its own `VERSION`, app bundle IDs, workspace data, logs, and watch
 - Choose **Create** in `./start_versions.sh`.
 - The script chooses the first unused `version_N` folder.
 - It copies Gridline, Gridline Debug, the logo, and skill-script sources.
+- It leaves Ponytail out of the version copy; that version's `start.sh` clones its own ignored Ponytail source when first started.
 - It skips build products, app bundles, debug logs, and model binaries.
 - It writes that version's `VERSION`, `README.md`, and `AGENTS.md` files.
 - It starts the new copy and downloads missing models into its own `skill_script/resources/models/`.
@@ -267,7 +292,7 @@ Each copy has its own `VERSION`, app bundle IDs, workspace data, logs, and watch
 ## Shared stop and diagnostic commands
 
 - `./stop.sh` stops the main app pair and all numbered versions.
-- Each watcher writes its app PID and build diagnostics inside that copy's `gridline_debug/build/`.
+- Each watcher writes its app PID and build diagnostics inside that copy's `gridline_debug/build/`. The main watcher runs `gridline_debug/collect_debug_logs.py`, which copies build results and semantic events into local `gridline_debug/timeline.jsonl`; Gridline appends completed Codex prompts there while Gridline Debug is open. The timeline resets on Gridline app launch; the Debug log viewer's Reset logs button requests deletion of the timeline, raw events, and saved build diagnostics. Inspect logs through the full-width lower viewer or `./gridline_debug/inspect-logs.sh`. The root `hot-reload-logs.md` remains a read-only archive. Generated logs and `user-log-view.json` are ignored by Git.
 - `gridline_versions/runtime-status.json` summarizes version app and watcher state.
 - A failed build leaves the current apps open and records errors in that copy's build folder.
 
@@ -276,8 +301,37 @@ Each copy has its own `VERSION`, app bundle IDs, workspace data, logs, and watch
 - If Gridline Debug reports Accessibility permission needed, use Set up access… and enable the matching app in macOS Accessibility settings: gridline_debug/Gridline Debug.app for main, or the paired version's inspector app.
 - If Accessibility is active but pointer monitoring is unavailable, check Privacy & Security → Input Monitoring and restart the matching inspector.
 - Use ./reset_gridline_accessibility.sh to list or reset only Gridline app permission entries. Preserve its explicit confirmation; never reset the global Accessibility service. Resetting closes and relaunches the selected app pair and ends its terminal sessions.
-- gridline_debug/events.jsonl contains semantic UI actions and terminal lifecycle events, not terminal output. gridline_debug/build/latest-status.json is the last build result; latest-errors.txt is the compact diagnostic; latest.log is full compiler output. Reports live under gridline_debug/reports/; .gitignore keeps generated reports and build diagnostics out of Git.
+- gridline_debug/events.jsonl contains semantic UI actions, terminal lifecycle events, safe Codex compaction metadata, and Debug-only Swift/Python stage traces, not terminal output. Gridline Debug's **Codex hooks** filter shows compaction start/complete and hook setup rows. gridline_debug/build/latest-status.json is the last build result; latest-errors.txt is the compact diagnostic; latest.log is full compiler output. Reports live under gridline_debug/reports/; .gitignore keeps generated reports and build diagnostics out of Git.
+- To inspect exactly the logs matching the user's current Debug window, run `./gridline_debug/inspect-logs.sh showUserlogFilters --format llm`. It reads `gridline_debug/user-log-view.json`, which Gridline Debug updates when Show, Workgroup, Search, or Following changes and when new timeline rows arrive. The command applies those Show, Workgroup, and Search filters to the same `timeline.jsonl`, reports whether the window is open, and emits the latest 30 matches as structured JSON with recorded details and code-path steps expanded to repo-relative file locations; pass `--limit 0` for all matches. For a user asking to see full log output, use `./gridline_debug/inspect-logs.sh showUserlogFilters --format text --limit N` and paste its complete output without a summary; `N` is the number of matching entries, not printed text lines. If `window_active` is false, the displayed controls are the last recorded view, not a currently open window. Use `./gridline_debug/inspect-logs.sh --category all --limit 30` only when the user asks for an independent Everything view rather than their current filters.
 - AX inspection only covers elements exposed in the target app's Accessibility tree. The hierarchy does not promise exact Swift source line numbers. Use the index and code-context mapping rather than guessing.
+
+### Swift and external-script runtime state
+
+Use the source that owns the state; compiler output alone cannot explain a running usage status.
+
+| Question | Where to inspect | What it tells you |
+| --- | --- | --- |
+| Did either app build? | `gridline_debug/build/latest-status.json`, `latest-errors.txt`, and `latest.log` | Build result, compact errors, and full compiler output; these are not runtime logs. |
+| Are Gridline and its monitor running? | `ps` process list | Process names and parent relationships without printing command arguments. |
+| What log entries is the user currently viewing? | `./gridline_debug/inspect-logs.sh showUserlogFilters --format llm` | Reads the live Show, Workgroup, Search, and Following state, then prints structured JSON entries with diagnostic details and repo-relative file/symbol code paths. Add `--limit 0` after the command to print all matches. |
+| Which workgroup did I type into, and what IN/OUT totals did the Python reader return? | Open Gridline Debug, then inspect the “Last terminal clicked” card or filter recent events by workgroup name, `terminal.targeted`, `terminal.inputSubmitted`, `workspace.terminalUsageStatusChanged`, or `workspace.terminalUsageMonitorFailed`. Events include the saved workgroup name beside its UUID. | The usage row shows cumulative IN/OUT/TOTAL counts, rows read/parsed, provider match status/reason, candidate count, and a compact Swift-to-Python source/function pipeline. Submitted input events contain only the Unicode-scalar character count after Enter; they never include typed content, terminal output, local paths, or exception messages. Diagnostics are collected only while the matching inspector is open. |
+| Where did that state come from? | `TerminalUsageStatus` in `gridline/Sources/Gridline/ProviderUsageService.swift` and `gridline/usage/terminal_usage.py` | Swift launches the Python JSON-lines reader, decodes each snapshot, then emits a debug event only when that terminal's diagnostic state changes. |
+| How should external execution be traced? | `DebugEvents.configurePythonProcess` / `recordExternalProcess` in `gridline/Sources/Gridline/DebugEvents.swift`; `gridline/runtime/gridline_trace.py` | Python `debug_event(FEATURE, message, ...)` emits a `GRIDLINE_DEBUG` record with the exact `FEATURE - message` prefix and safe counts; the Swift bridge stores it as `runtime.pythonDebug`. Use a stable feature name such as `TERMINAL_HEADER` so Debug can filter it. Log only when the feature state changes. For frequently polled native commands, record failures only; routine start/success events flood the log. Never log prompts, transcripts, terminal output, paths, or exception messages. |
+| Is the Python source syntactically valid? | `python3 -B -c 'import ast, pathlib; ast.parse(pathlib.Path("gridline/usage/terminal_usage.py").read_text())'` | Parses the script without creating bytecode files; this does not exercise provider matching. |
+
+Gridline Debug's lower log panel defaults to **Everything**. Its Show menu filters by event category, while Workgroup and Search further narrow the visible rows. The live-view shell command above mirrors those controls. Each terminal submission row reports safe character counts and does not include submitted text in `events.jsonl`; completed Codex prompts are kept in the separate local timeline while Gridline Debug is open. Use Search for a workgroup name, event, feature prefix such as `TERMINAL_HEADER`, or session UUID.
+
+Useful focused commands from the repository root:
+
+~~~sh
+cat gridline_debug/build/latest-status.json
+cat gridline_debug/build/latest-errors.txt
+tail -n 40 gridline_debug/build/latest.log
+ps -axo pid=,ppid=,stat=,comm= | rg 'Gridline|MyLLMDebug|watch-build|Python'
+rg 'terminal.targeted|workspace.terminalUsageStatusChanged|workspace.terminalUsageMonitorFailed' gridline_debug/events.jsonl | tail -n 40
+~~~
+
+For live Swift inspection, attach Xcode's LLDB to the Gridline PID and set a breakpoint on `TerminalUsageStatus.apply`. Inspect the snapshot's `status`, `diagnostic`, and `candidateCount` fields. Use `thread backtrace all` for a stalled call. Do not dump terminal view state or buffers. Python reader exceptions are converted to a status event containing only the exception type; a nonzero reader exit is recorded separately. The reader catches recoverable polling errors and continues on the next three-second cycle.
 
 ## Product direction and handoff
 
@@ -314,6 +368,7 @@ These are references, not a requirement to copy another project's architecture. 
 | App entry and menu commands | `GridlineApp` | `gridline/Sources/Gridline/GridlineApp.swift` | `rg -n 'struct GridlineApp|commands|CommandGroup' gridline/Sources/Gridline` |
 | Workspace data, terminal process, and workspace actions | `SavedGroup`, `SavedSession`, `WorkspaceSnapshot`, `TerminalSession`, `WorkspaceStore` | `gridline/Sources/Gridline/Workspace.swift` | `rg -n 'struct SavedGroup|class TerminalSession|class WorkspaceStore|func runDirectoryCommand' gridline/Sources/Gridline/Workspace.swift` |
 | Workspace and terminal presentation | `WorkspaceView`, directory prompt, terminal pane, transcription and skill UI | `gridline/Sources/Gridline/Workspace.swift` | `rg -n 'struct WorkspaceView|struct TerminalPane|DirectoryCommandField|SkillScriptDropdownView' gridline/Sources/Gridline/Workspace.swift` |
+| Codex project hook installation and hook state view | `CodexHooksPanel`, `CodexHooksPanelModel` | `gridline/Sources/Gridline/CodexHooks.swift` | `rg -n 'CodexHooksPanel|CodexHooksPanelModel' gridline/Sources/Gridline/CodexHooks.swift` |
 | Live voice capture and transcription | `AudioTranscriptionModel` | `gridline/Sources/Gridline/Workspace.swift` | `rg -n 'class AudioTranscriptionModel|AudioTranscriptionModel' gridline/Sources/Gridline` |
 | Voice todo model and presentation | `VoiceTodoModel`, `VoiceTodoModalView` | `gridline/Sources/Gridline/VoiceTodo.swift` | `rg -n 'class VoiceTodoModel|struct VoiceTodoModalView|VoiceTodoFormatting' gridline/Sources/Gridline/VoiceTodo.swift` |
 | Provider allowance and process usage state | `CodexUsageStatus`, `ProviderUsageStatus`, typed snapshots | `gridline/Sources/Gridline/ProviderUsageService.swift` | `rg -n 'class CodexUsageStatus|class ProviderUsageStatus|struct ProviderUsageSnapshot|refreshProcessStatus' gridline/Sources/Gridline/ProviderUsageService.swift` |

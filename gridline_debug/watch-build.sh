@@ -5,6 +5,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$ROOT/gridline_debug/build"
 mkdir -p "$BUILD_DIR"
 printf '%s\n' "$$" > "$BUILD_DIR/watch.pid"
+python3 -B "$ROOT/gridline_debug/collect_debug_logs.py" --watcher-pid "$$" &
+DEBUG_LOG_COLLECTOR_PID=$!
+trap 'kill "$DEBUG_LOG_COLLECTOR_PID" 2>/dev/null || true' EXIT
 STATUS="$BUILD_DIR/latest-status.json"
 LOG="$BUILD_DIR/latest.log"
 ERRORS="$BUILD_DIR/latest-errors.txt"
@@ -34,8 +37,12 @@ first_build=1
 
 close_existing_apps() {
   rm -f "$TARGET_PID_FILE"
-  osascript -e "tell application id \"$GRIDLINE_ID\" to quit" >/dev/null 2>&1 || true
-  osascript -e "tell application id \"$INSPECTOR_ID\" to quit" >/dev/null 2>&1 || true
+  osascript -e "with timeout of 2 seconds" \
+    -e "tell application id \"$GRIDLINE_ID\" to quit" \
+    -e "end timeout" >/dev/null 2>&1 || true
+  osascript -e "with timeout of 2 seconds" \
+    -e "tell application id \"$INSPECTOR_ID\" to quit" \
+    -e "end timeout" >/dev/null 2>&1 || true
 
   # Give normal app termination a moment, then enforce a clean single instance.
   for attempt in {1..20}; do
@@ -80,7 +87,10 @@ fingerprint() {
     find "$ROOT/gridline/Sources" "$ROOT/gridline/template" "$ROOT/gridline_debug/Inspector/Sources" "$ROOT/gridline/tools" -type f -name '*.swift' -exec stat -f '%m %N' {} \; 2>/dev/null
     find "$ROOT/skill_script" -type f ! -path '*/resources/models/*' -exec stat -f '%m %N' {} \; 2>/dev/null
     find "$ROOT/gridline/usage" -type f -name '*.py' -exec stat -f '%m %N' {} \; 2>/dev/null
+    find "$ROOT/gridline/runtime" -type f -name '*.py' -exec stat -f '%m %N' {} \; 2>/dev/null
+    find "$ROOT/gridline/hooks" -type f \( -name '*.py' -o -name '*.cjs' -o -name '*.template' \) -exec stat -f '%m %N' {} \; 2>/dev/null
     stat -f '%m %N' "$ROOT/logo/Gridline2x.png" "$ROOT/gridline/Package.swift" "$ROOT/gridline/build-app-icon.sh" "$ROOT/gridline/build-app.sh" "$ROOT/gridline_debug/build-inspector.sh" "$ROOT/VERSION" 2>/dev/null
+    stat -f '%m %N' "$ROOT/hook_vendor/ponytail/VENDOR_VERSION" "$ROOT/hook_vendor/ponytail/hooks/ponytail-map.js" "$ROOT/hook_vendor/ponytail/LICENSE" "$ROOT/hook_vendor/ponytail/assets/logo-dark.png" 2>/dev/null
   } | sort | shasum -a 256 | cut -d ' ' -f 1
 }
 

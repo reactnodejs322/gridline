@@ -179,9 +179,31 @@ final class VoiceTodoModel: ObservableObject {
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         process.environment = environment
         process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        DebugEvents.configurePythonProcess(
+            process,
+            workflow: "voice_todo",
+            script: "voice_todo.py",
+            swiftStage: "VoiceTodoModel.beginCapture"
+        )
+        process.terminationHandler = { finished in
+            DebugEvents.recordPythonProcessFinished(
+                workflow: "voice_todo",
+                script: "voice_todo.py",
+                swiftStage: "VoiceTodoModel.beginCapture",
+                exitCode: finished.terminationStatus
+            )
+        }
         do { try process.run() }
-        catch { status = "Could not start the local Whisper worker: \(error.localizedDescription)"; return }
+        catch {
+            DebugEvents.recordPythonProcessFinished(
+                workflow: "voice_todo",
+                script: "voice_todo.py",
+                swiftStage: "VoiceTodoModel.beginCapture",
+                exitCode: -1
+            )
+            status = "Could not start the local Whisper worker: \(error.localizedDescription)"
+            return
+        }
         worker = process
 
         let input = engine.inputNode

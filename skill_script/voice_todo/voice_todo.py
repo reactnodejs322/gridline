@@ -7,6 +7,11 @@ import re
 import sys
 import time
 from pathlib import Path
+try:
+    from gridline_trace import stage as trace_stage
+except ImportError:
+    def trace_stage(*args, **kwargs) -> None:
+        return None
 
 
 WAKE_PHRASE = re.compile(
@@ -22,12 +27,15 @@ def main() -> int:
 
     queue = Path(sys.argv[1])
     model = Path(sys.argv[2])
+    current_stage = "load_model"
     queue.mkdir(parents=True, exist_ok=True)
     try:
+        trace_stage("voice_todo", current_stage, "started")
         import mlx_whisper
 
         if not (model / "config.json").is_file() or not (model / "weights.npz").is_file():
             raise FileNotFoundError(f"Whisper model files are missing from {model}")
+        trace_stage("voice_todo", current_stage, "completed")
         while True:
             chunks = sorted(queue.glob("chunk-*.wav"))
             if not chunks:
@@ -38,6 +46,8 @@ def main() -> int:
             chunk = chunks[0]
             index = int(chunk.stem.split("-")[-1])
             try:
+                current_stage = "transcribe_chunk"
+                trace_stage("voice_todo", current_stage, "started", index=index)
                 result = mlx_whisper.transcribe(
                     str(chunk),
                     path_or_hf_repo=str(model),
@@ -78,13 +88,16 @@ def main() -> int:
                 temporary = destination.with_suffix(".tmp")
                 temporary.write_text(json.dumps(payload), encoding="utf-8")
                 temporary.replace(destination)
+                trace_stage("voice_todo", current_stage, "completed", index=index, segments=len(segments))
             except Exception as error:
+                trace_stage("voice_todo", current_stage, "failed", error, index=index)
                 destination = queue / f"result-{index:06d}.json"
                 destination.write_text(json.dumps({"index": index, "error": str(error)}), encoding="utf-8")
             finally:
                 chunk.unlink(missing_ok=True)
         return 0
     except Exception as error:
+        trace_stage("voice_todo", current_stage, "failed", error)
         (queue / "worker-error.txt").write_text(f"{type(error).__name__}: {error}", encoding="utf-8")
         return 1
 

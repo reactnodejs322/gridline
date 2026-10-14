@@ -126,6 +126,7 @@ create_version() {
   mkdir -p "$destination"
   rsync -a --exclude='/.build/' --exclude='/*.app/' "$ROOT/gridline/" "$destination/gridline/"
   rsync -a --exclude='/Inspector/.build/' --exclude='/*.app/' --exclude='/events.jsonl' --exclude='/build/' --exclude='/reports/*' "$ROOT/gridline_debug/" "$destination/gridline_debug/"
+  rsync -a --exclude='/ponytail/' --exclude='/.ponytail-upstream/' --exclude='/.ponytail-stage-*/' --exclude='/.ponytail-previous/' "$ROOT/hook_vendor/" "$destination/hook_vendor/"
   rsync -a "$ROOT/logo/" "$destination/logo/"
   rsync -a \
     --include='/resources/models/' \

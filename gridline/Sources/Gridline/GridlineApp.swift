@@ -7,6 +7,7 @@ struct GridlineApp: App {
     @StateObject private var templateStore = GridlineTemplateStore()
 
     init() {
+        DebugEvents.resetEventLogForAppLaunch()
         if let iconURL = Bundle.main.url(forResource: "Gridline", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = icon

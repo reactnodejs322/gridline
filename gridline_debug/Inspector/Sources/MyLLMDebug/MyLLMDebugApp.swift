@@ -16,7 +16,7 @@ struct MyLLMDebugApp: App {
         WindowGroup {
             InspectorView()
                 .environmentObject(inspector)
-                .frame(minWidth: 960, minHeight: 680)
+                .frame(minWidth: 1120, minHeight: 780)
                 .preferredColorScheme(.dark)
                 .task {
                     inspector.refreshPermissionState()
@@ -28,5 +28,6 @@ struct MyLLMDebugApp: App {
                 }
         }
         .windowStyle(.titleBar)
+        .defaultSize(width: 1300, height: 900)
     }
 }

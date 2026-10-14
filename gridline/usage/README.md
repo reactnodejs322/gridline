@@ -35,6 +35,34 @@ update it from the official page when the model or pricing changes.
    displayed plan-value amount is that percentage of the configured `$20`
    plan price.
 
+## Per-terminal live usage
+
+- `terminal_usage.py` tails only active Codex/Claude session logs associated
+  with Gridline terminal process trees. It emits one machine-readable snapshot
+  per Gridline terminal every three seconds.
+- The script reads model, session, and token-usage metadata only. It does not
+  emit or save prompts, assistant text, terminal output, or keystrokes.
+- A terminal is matched to a provider log using the active provider process,
+  its working folder, and the log's creation/update times. When focus and a new
+  file update establish a match, the reader pins that file to the terminal's
+  provider-process PID. Later focus changes cannot transfer its counts to a
+  neighboring terminal. A newly created file can establish a new match after
+  that terminal is focused; unclear matches remain unassigned.
+- Codex session totals come from per-thread `total_token_usage`; the newest
+  request's `last_token_usage` is exposed separately as latest-turn IN/OUT.
+  The terminal popover labels both scopes so cumulative IN is not mistaken for
+  the size of one short prompt. Per-turn deltas are priced using the model
+  attached to each turn. Claude totals and estimates use assistant usage
+  records within the matched session file.
+- The `gridline.workspace.tokenUsage` popover has a separate
+  `gridline.workspace.terminalUsage.disable` setting. Pausing stops this local
+  watcher for every terminal and keeps the last in-memory snapshots visible;
+  it does not change ChatGPT allowance polling or the Claude weekly meter.
+- Estimates remain API-equivalent comparisons, not subscription charges.
+  Unknown model rates are reported without pricing rather than treated as `$0`.
+- Runtime diagnosis is documented in `AGENTS.md` under [Swift and external-script runtime state](../../AGENTS.md#swift-and-external-script-runtime-state). It covers the Swift snapshot events, Python reader status, and the difference between build logs and runtime state.
+- Swift-launched usage readers use the shared `gridline/runtime/gridline_trace.py` stage helper and `DebugEvents.configurePythonProcess`; trace entries appear only while Gridline Debug is open and contain no exception messages or local paths.
+
 ## Current local rate snapshot
 
 - Last verified: 2026-10-07
@@ -44,4 +72,3 @@ update it from the official page when the model or pricing changes.
 - Codex estimate window: local Codex session metadata; current map prices the
   short-context standard tier because local records do not reliably identify
   a separate billing tier
-

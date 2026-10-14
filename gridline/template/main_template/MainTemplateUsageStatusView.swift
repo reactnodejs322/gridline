@@ -6,6 +6,7 @@ struct MainTemplateUsageStatusView: View {
 
     let snapshot: ProviderUsageSnapshot
     @ObservedObject var codexUsage: CodexUsageStatus
+    @ObservedObject var terminalUsage: TerminalUsageStatus
     let palette: GridlineTemplate.Palette
     @State private var showingIntervalEditor = false
 
@@ -63,7 +64,11 @@ struct MainTemplateUsageStatusView: View {
             .accessibilityIdentifier("gridline.workspace.tokenUsage")
             .help("Click to adjust ChatGPT usage refresh interval or disable automatic fetching.")
             .popover(isPresented: $showingIntervalEditor, arrowEdge: .bottom) {
-                UsageRefreshSettingsPopover(codexUsage: codexUsage, palette: palette)
+                UsageRefreshSettingsPopover(
+                    codexUsage: codexUsage,
+                    terminalUsage: terminalUsage,
+                    palette: palette
+                )
             }
 
             if snapshot.claudeActiveTerminals > 0 {
@@ -131,6 +136,7 @@ private struct UsageRefreshSettingsPopover: View {
     }
 
     @ObservedObject var codexUsage: CodexUsageStatus
+    @ObservedObject var terminalUsage: TerminalUsageStatus
     let palette: GridlineTemplate.Palette
     @State private var value = "3"
     @State private var unit: Unit = .seconds
@@ -177,8 +183,19 @@ private struct UsageRefreshSettingsPopover: View {
             .help("When “Disable automatic fetching” is off, Gridline calls Codex every this amount of time to refresh the usage bar.")
 
             Divider()
+            Toggle(isOn: Binding(
+                get: { !terminalUsage.updatesEnabled },
+                set: { terminalUsage.setUpdatesEnabled(!$0) }
+            )) {
+                Text("Disable per-terminal usage updates")
+            }
+            .accessibilityIdentifier("gridline.workspace.terminalUsage.disable")
+            .help("Stops local usage-log monitoring and hides the per-terminal IN/OUT row in every workgroup. Re-enable to show the rows and resume monitoring. The weekly allowance meter is unaffected.")
+
+            Divider()
             Text("Custom interval")
                 .font(.system(size: 10, weight: .semibold))
+                .accessibilityIdentifier("gridline.workspace.usageRefresh.intervalEditor")
             HStack(spacing: 8) {
                 TextField("3", text: $value)
                     .textFieldStyle(.roundedBorder)
@@ -200,14 +217,18 @@ private struct UsageRefreshSettingsPopover: View {
                 Button("Apply custom") {
                     if let intervalMilliseconds {
                         codexUsage.setRefreshIntervalMilliseconds(intervalMilliseconds)
+                        DebugEvents.record("workspace.usageRefresh.customApplied", element: "gridline.workspace.usageRefresh.applyCustom", details: [
+                            "intervalMilliseconds": String(intervalMilliseconds)
+                        ])
                     }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(intervalMilliseconds == nil)
+                .accessibilityIdentifier("gridline.workspace.usageRefresh.applyCustom")
+            .help("Apply this custom ChatGPT allowance refresh interval. This does not change per-terminal usage visibility or monitoring.")
             }
         }
         .onAppear(perform: loadCurrentInterval)
-        .accessibilityIdentifier("gridline.workspace.usageRefresh.intervalEditor")
     }
 
     private func intervalDescription(_ milliseconds: Int) -> String {

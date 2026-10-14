@@ -33,13 +33,16 @@ extension GridlineTemplate {
                 editingGroup: context.editingGroup,
                 groupDraft: context.groupDraft,
                 editingSession: context.editingSession,
-                sessionDraft: context.sessionDraft
+                sessionDraft: context.sessionDraft,
+                terminalUsage: context.terminalUsage,
+                terminalUsageUpdatesEnabled: context.terminalUsageUpdatesEnabled
             ))
         },
-        makeUsageStatusView: { snapshot, codexUsage in
+        makeUsageStatusView: { snapshot, codexUsage, terminalUsage in
             AnyView(MainTemplateUsageStatusView(
                 snapshot: snapshot,
                 codexUsage: codexUsage,
+                terminalUsage: terminalUsage,
                 palette: GridlineTemplate.mainTemplatePalette
             ))
         }

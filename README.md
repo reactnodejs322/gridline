@@ -43,7 +43,7 @@ That wall of tabs is the problem: every new request adds another place to lose c
 
 **Example request:** “Show the weekly usage meter once in the workspace header, not inside every terminal.”
 
-Gridline Debug identifies the UI element and provides code breadcrumbs; it does not make the requested change itself. It reads interface accessibility information and does not capture terminal text or keystrokes.
+Gridline Debug identifies the UI element and provides code breadcrumbs; it does not make the requested change itself. Its window keeps the scrollable inspector above a full-width, searchable live log. While Gridline Debug is open, a completed Codex prompt appears in its local log timeline beside the matching terminal usage entries.
 
 When extending Gridline's interface, reuse and extend its existing controls, spacing, colors, and button styles. Add a new component only when the interaction needs one, and keep its appearance consistent with the rest of the workspace.
 
@@ -57,13 +57,19 @@ cd gridline
 ./start.sh
 ```
 
-The first build downloads the speech models into `skill_script/resources/models` and SwiftTerm through Swift Package Manager. Model versions are pinned and their hashes verified; the models are ignored by Git. `start.sh` builds and opens Gridline and its companion Gridline Debug inspector, then keeps a watcher running in the terminal. Install the Codex CLI separately to start Codex sessions.
+The first build downloads the speech models into `skill_script/resources/models` and SwiftTerm through Swift Package Manager. The first `start.sh` run also clones Ponytail into the ignored `hook_vendor/ponytail` folder when it is missing. Model versions are pinned and their hashes verified; the models are ignored by Git. `start.sh` builds and opens Gridline and its companion Gridline Debug inspector, then keeps a watcher running in the terminal. Install the Codex CLI separately to start Codex sessions.
 
-Gridline Debug uses macOS Accessibility permission to inspect Gridline’s interface. The inspector does not read terminal text or keystrokes. You can also build just Gridline with `./gridline/build-app.sh` and open `gridline/Gridline.app`.
+While the watcher runs, Gridline Debug collects builds, UI actions, Swift and Python diagnostics, and Enter-submitted Codex prompts in `gridline_debug/timeline.jsonl`. The lower log view defaults to **Everything**, supports filters and search, and has **Reset logs** to delete its local history. New logs appear at the bottom; **Following** scrolls there as they arrive, and clicking it pauses following so you can scroll up. Click **Follow** to resume and jump to the newest log. Gridline starts a fresh timeline on each app launch. To print the same filter settings and matching entries currently shown in Gridline Debug, run `./gridline_debug/inspect-logs.sh showUserlogFilters`; to choose independent filters, use `./gridline_debug/inspect-logs.sh --category all --limit 20`. The root `hot-reload-logs.md` is a retained archive and is no longer written. Both local log files are ignored by Git. Detailed runtime events and prompt capture are active while the paired Gridline Debug app is open.
+
+Gridline Debug uses macOS Accessibility permission to inspect Gridline’s interface. It does not read terminal output or individual keystrokes. When open, completed Codex prompts are saved only in its local timeline. You can also build just Gridline with `./gridline/build-app.sh` and open `gridline/Gridline.app`.
+
+To update Gridline's shared Ponytail source, open **Workspace controls → Ponytail source…** and confirm **Git pull and update vendor**. This pulls the official Ponytail repository into an isolated checkout and refreshes Gridline's vendored copy; it does not update Gridline itself.
+
+To configure hooks for a project, open that work group’s **ellipsis → Project hooks…**. Each group uses its terminal’s live folder, or the group folder before a terminal is started; Gridline installs into the containing Git repository, or that folder outside Git. Hook configuration and `ponytail.md` live under the project’s `.codex/` folder. Existing `.codex/hooks.json` entries and Ponytail rules are preserved; only the marked generated map section in `.codex/ponytail.md` is refreshed. In Codex, review and trust the project hooks with `/hooks`; an already-running session may need to restart. With Gridline Debug open, compactions appear in **Everything** or **Codex hooks**.
 
 ## Project status
 
-Gridline is under active development. It focuses on organizing parallel terminal work: groups, folders, labels, navigation, and a persistent workspace layout. Closing or rebuilding the app ends active terminal sessions; the workspace organization is saved locally.
+Gridline is under active development. It focuses on organizing parallel terminal work: groups, folders, labels, navigation, and a persistent workspace layout. Closing or rebuilding the app ends active terminal sessions; each terminal's last working directory and the workspace organization are saved locally. Codex terminals reopen in their last folder with a fresh Codex session.
 
 ## License and attribution
 

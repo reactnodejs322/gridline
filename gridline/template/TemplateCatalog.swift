@@ -24,7 +24,7 @@ struct GridlineTemplate: Identifiable {
     let name: String
     let palette: Palette
     let makeWorkGroupCard: (GridlineWorkGroupCardContext) -> AnyView
-    let makeUsageStatusView: (ProviderUsageSnapshot, CodexUsageStatus) -> AnyView
+    let makeUsageStatusView: (ProviderUsageSnapshot, CodexUsageStatus, TerminalUsageStatus) -> AnyView
 }
 
 /// Shared model and interaction state provided to each skin's work-group UI.
@@ -38,6 +38,8 @@ struct GridlineWorkGroupCardContext {
     let groupDraft: Binding<String>
     let editingSession: Binding<UUID?>
     let sessionDraft: Binding<String>
+    let terminalUsage: [UUID: TerminalUsageSnapshot]
+    let terminalUsageUpdatesEnabled: Bool
 }
 
 /// Central catalog for available skins. Add variants here while keeping

@@ -36,9 +36,18 @@ cp "../logo/Gridline2x.png" "$APP/Contents/Resources/Gridline2x.png"
 rm -rf "$APP/Contents/Resources/usage"
 mkdir -p "$APP/Contents/Resources/usage"
 cp -R "usage/." "$APP/Contents/Resources/usage/"
+rm -rf "$APP/Contents/Resources/runtime"
+mkdir -p "$APP/Contents/Resources/runtime"
+cp -R "runtime/." "$APP/Contents/Resources/runtime/"
 rm -rf "$APP/Contents/Resources/skill_script"
 mkdir -p "$APP/Contents/Resources/skill_script"
 cp -R "../skill_script/." "$APP/Contents/Resources/skill_script/"
+rm -rf "$APP/Contents/Resources/hooks"
+mkdir -p "$APP/Contents/Resources/hooks"
+cp -R "hooks/." "$APP/Contents/Resources/hooks/"
+cp "../hook_vendor/ponytail/hooks/ponytail-map.js" "$APP/Contents/Resources/hooks/ponytail-map.js"
+cp "../hook_vendor/ponytail/LICENSE" "$APP/Contents/Resources/hooks/ponytail-LICENSE"
+cp "../hook_vendor/ponytail/assets/logo-dark.png" "$APP/Contents/Resources/ponytail-logo.png"
 "$(pwd)/build-app-icon.sh" "$ICON_SOURCE" "$APP/Contents/Resources/Gridline.icns" Gridline
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

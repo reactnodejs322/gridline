@@ -89,3 +89,5 @@ The largest difference is agent operations: Gridline organizes where Codex work 
 
 
 https://www.youtube.com/watch?v=NsgjLVOcVMs
+
+https://github.com/ajsahni/agents-office

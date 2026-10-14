@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SwiftUI
 import SwiftTerm
 import UniformTypeIdentifiers
@@ -18,6 +19,7 @@ struct SavedSession: Codable, Identifiable {
     var kind: SessionKind
     var label: String
     var followsTerminalTitle: Bool
+    var workingDirectory: String? = nil
     var fontSize: Double? = nil
     var terminalHeight: Double? = nil
 }
@@ -117,9 +119,20 @@ final class AudioTranscriptionModel: ObservableObject {
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         process.environment = environment
         process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        DebugEvents.configurePythonProcess(
+            process,
+            workflow: "audio_to_text",
+            script: "audio_to_text.py",
+            swiftStage: "AudioTranscriptionModel.transcribe"
+        )
         self.process = process
         process.terminationHandler = { [weak self] finished in
+            DebugEvents.recordPythonProcessFinished(
+                workflow: "audio_to_text",
+                script: "audio_to_text.py",
+                swiftStage: "AudioTranscriptionModel.transcribe",
+                exitCode: finished.terminationStatus
+            )
             let text = (try? String(contentsOf: outputURL, encoding: .utf8))?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             try? FileManager.default.removeItem(at: outputURL)
@@ -146,10 +159,122 @@ final class AudioTranscriptionModel: ObservableObject {
                 ? "Transcribing and identifying speakers locally…"
                 : "Transcribing locally and organizing pauses…"
         } catch {
+            DebugEvents.recordPythonProcessFinished(
+                workflow: "audio_to_text",
+                script: "audio_to_text.py",
+                swiftStage: "AudioTranscriptionModel.transcribe",
+                exitCode: -1
+            )
             self.process = nil
             isTranscribing = false
             status = "Could not start local Whisper: \(error.localizedDescription)"
         }
+    }
+}
+
+@MainActor
+final class GridlineTerminalView: LocalProcessTerminalView {
+    var submissionContext: (sessionID: UUID, groupID: UUID, groupName: String, kind: String)?
+    var onSubmission: (() -> Void)?
+    private var isSubmissionCountingEnabled = false
+    private var typedScalarCount = 0
+    private var pastedScalarCount = 0
+    private var pendingInputScalarCount = 0
+    private var pendingPromptText = ""
+
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        if let text = string as? String {
+            pendingInputScalarCount += text.unicodeScalars.count
+        } else if let text = string as? NSAttributedString {
+            pendingInputScalarCount += text.string.unicodeScalars.count
+        }
+        if isSubmissionCountingEnabled, DebugEvents.isInspectorOpen {
+            if let text = string as? String {
+                typedScalarCount += text.unicodeScalars.count
+                pendingPromptText += text
+            } else if let text = string as? NSAttributedString {
+                typedScalarCount += text.string.unicodeScalars.count
+                pendingPromptText += text.string
+            }
+        } else {
+            resetSubmission()
+        }
+        super.insertText(string, replacementRange: replacementRange)
+    }
+
+    override func paste(_ sender: Any) {
+        if let text = NSPasteboard.general.string(forType: .string) {
+            pendingInputScalarCount += text.unicodeScalars.count
+        }
+        if isSubmissionCountingEnabled, DebugEvents.isInspectorOpen,
+           let text = NSPasteboard.general.string(forType: .string) {
+            pastedScalarCount += text.unicodeScalars.count
+            pendingPromptText += text
+        } else {
+            resetSubmission()
+        }
+        super.paste(sender)
+    }
+
+    override func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        let submittedText = pendingInputScalarCount > 0
+        if isSubmissionCountingEnabled, submittedText,
+           data.contains(where: { $0 == 0x0D || $0 == 0x0A }) {
+            onSubmission?()
+        }
+        if data.count == 1, let byte = data.first, byte == 0x08 || byte == 0x7F {
+            pendingInputScalarCount = max(0, pendingInputScalarCount - 1)
+        }
+        if isSubmissionCountingEnabled, DebugEvents.isInspectorOpen {
+            if data.contains(where: { $0 == 0x0D || $0 == 0x0A }) {
+                if typedScalarCount + pastedScalarCount > 0, let context = submissionContext {
+                    DebugEvents.recordTerminalSubmission(
+                        sessionID: context.sessionID,
+                        groupID: context.groupID,
+                        groupName: context.groupName,
+                        kind: context.kind,
+                        typedCharacterCount: typedScalarCount,
+                        pastedCharacterCount: pastedScalarCount,
+                        submittedText: pendingPromptText
+                    )
+                }
+                resetSubmission()
+            } else if data.count == 1, let byte = data.first, byte == 0x08 || byte == 0x7F {
+                if !pendingPromptText.isEmpty { pendingPromptText.removeLast() }
+                if typedScalarCount > 0 {
+                    typedScalarCount -= 1
+                } else {
+                    pastedScalarCount = max(0, pastedScalarCount - 1)
+                }
+            }
+        } else if !DebugEvents.isInspectorOpen {
+            resetSubmission()
+        }
+        if data.contains(where: { $0 == 0x0D || $0 == 0x0A }) {
+            pendingInputScalarCount = 0
+        }
+        super.send(source: source, data: data)
+    }
+
+    func enableSubmissionCharacterCounting() {
+        isSubmissionCountingEnabled = true
+        resetSubmission()
+    }
+
+    func sendTestSubmission(_ text: String) {
+        guard isSubmissionCountingEnabled else { return }
+        resetSubmission()
+        typedScalarCount = text.unicodeScalars.count
+        pendingInputScalarCount = typedScalarCount
+        pendingPromptText = text
+        send(txt: text)
+        send(txt: "\r")
+    }
+
+    private func resetSubmission() {
+        typedScalarCount = 0
+        pastedScalarCount = 0
+        pendingPromptText = ""
     }
 }
 
@@ -165,39 +290,67 @@ final class TerminalSession: NSObject, ObservableObject, Identifiable, LocalProc
     let id: UUID
     let groupID: UUID
     let kind: SessionKind
-    let terminal: LocalProcessTerminalView
+    let terminal: GridlineTerminalView
+    let launchDirectory: String
     @Published var label: String
     @Published var followsTerminalTitle: Bool
     @Published var isRunning = true
+    @Published private(set) var currentDirectory: String
     @Published private(set) var fontSize: CGFloat
     @Published private(set) var terminalHeight: CGFloat
     var onChange: (() -> Void)?
+    private var lastLoggedTerminalTitle: String?
+    private var currentDirectoryTimer: Timer?
 
-    init(saved: SavedSession, directory: String) {
+    private(set) var groupName: String
+
+    init(saved: SavedSession, directory: String, groupName: String) {
         id = saved.id
         groupID = saved.groupID
         kind = saved.kind
+        launchDirectory = directory
+        currentDirectory = URL(fileURLWithPath: directory).standardizedFileURL.path
+        self.groupName = groupName
         label = saved.label
         followsTerminalTitle = saved.followsTerminalTitle
         let restoredFontSize = CGFloat(saved.fontSize ?? Double(Self.defaultFontSize))
         fontSize = min(max(restoredFontSize, Self.minimumFontSize), Self.maximumFontSize)
         let restoredHeight = CGFloat(saved.terminalHeight ?? Double(Self.defaultTerminalHeight))
         terminalHeight = min(max(restoredHeight, Self.minimumTerminalHeight), Self.maximumTerminalHeight)
-        terminal = LocalProcessTerminalView(frame: .zero)
+        terminal = GridlineTerminalView(frame: .zero)
+        terminal.submissionContext = (
+            sessionID: saved.id,
+            groupID: saved.groupID,
+            groupName: groupName,
+            kind: saved.kind.rawValue
+        )
         super.init()
         terminal.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         terminal.processDelegate = self
+        var environment = Terminal.getEnvironmentVariables(termName: "xterm-256color")
+        environment += [
+            "GRIDLINE_DEBUG_EVENTS_PATH=\(DebugEvents.directory.appendingPathComponent("events.jsonl").path)",
+            "GRIDLINE_DEBUG_VIEW_STATE_PATH=\(DebugEvents.directory.appendingPathComponent("user-log-view.json").path)",
+            "GRIDLINE_SESSION_ID=\(saved.id.uuidString)",
+            "GRIDLINE_GROUP_ID=\(saved.groupID.uuidString)",
+            "GRIDLINE_GROUP_NAME=\(groupName)"
+        ]
         terminal.startProcess(
             executable: "/bin/zsh",
             args: ["-l"],
+            environment: environment,
             currentDirectory: directory
         )
+        monitorCurrentDirectory()
         DebugEvents.record("terminal.started", element: kind == .codex ? "gridline.session.codex" : "gridline.session.shell", details: ["kind": kind.rawValue, "session": id.uuidString, "directory": directory])
         if kind == .codex {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
                 guard let self, self.isRunning else { return }
                 self.terminal.send(txt: "codex\n")
+                self.terminal.enableSubmissionCharacterCounting()
             }
+        } else {
+            terminal.enableSubmissionCharacterCounting()
         }
     }
 
@@ -230,6 +383,44 @@ final class TerminalSession: NSObject, ObservableObject, Identifiable, LocalProc
         onChange?()
     }
 
+    func updateGroupName(_ value: String) {
+        guard groupName != value else { return }
+        groupName = value
+        terminal.submissionContext = (
+            sessionID: id,
+            groupID: groupID,
+            groupName: value,
+            kind: kind.rawValue
+        )
+    }
+
+    private func monitorCurrentDirectory() {
+        currentDirectoryTimer?.invalidate()
+        currentDirectoryTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshCurrentDirectory() }
+        }
+    }
+
+    private func refreshCurrentDirectory() {
+        let pid = terminal.process.shellPid
+        guard pid > 0 else { return }
+        var info = proc_vnodepathinfo()
+        let size = proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, Int32(MemoryLayout<proc_vnodepathinfo>.size))
+        guard size == Int32(MemoryLayout<proc_vnodepathinfo>.size) else { return }
+        let path = withUnsafePointer(to: &info.pvi_cdir.vip_path) { pointer in
+            pointer.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+        }
+        updateCurrentDirectory(path)
+    }
+
+    private func updateCurrentDirectory(_ path: String) {
+        guard path.hasPrefix("/"), FileManager.default.fileExists(atPath: path) else { return }
+        let normalized = URL(fileURLWithPath: path).standardizedFileURL.path
+        guard normalized != currentDirectory else { return }
+        currentDirectory = normalized
+        onChange?()
+    }
+
     nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
         Task { @MainActor [weak self] in self?.receiveTerminalTitle(title) }
     }
@@ -239,19 +430,46 @@ final class TerminalSession: NSObject, ObservableObject, Identifiable, LocalProc
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         label = clean
-        DebugEvents.record("terminal.title", element: "gridline.session.title", details: ["session": id.uuidString, "title": clean])
+        let spinnerFrames = Set("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".unicodeScalars)
+        let isSpinnerFrame = clean.unicodeScalars.first.map { spinnerFrames.contains($0) } ?? false
+        if !isSpinnerFrame, clean != lastLoggedTerminalTitle {
+            lastLoggedTerminalTitle = clean
+            // Keep the lifecycle event useful without storing terminal-derived title text.
+            DebugEvents.record("terminal.title", element: "gridline.session.title", details: ["session": id.uuidString])
+        }
         onChange?()
     }
 
     nonisolated func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
-    nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+    nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
+        guard let directory else { return }
+        Task { @MainActor [weak self] in
+            if let url = URL(string: directory), url.isFileURL {
+                self?.updateCurrentDirectory(url.path)
+            } else {
+                self?.updateCurrentDirectory(directory)
+            }
+        }
+    }
     nonisolated func processTerminated(source: TerminalView, exitCode: Int32?) {
         Task { @MainActor [weak self] in self?.receiveProcessExit(exitCode) }
     }
 
     private func receiveProcessExit(_ exitCode: Int32?) {
+        currentDirectoryTimer?.invalidate()
+        currentDirectoryTimer = nil
         isRunning = false
         DebugEvents.record("terminal.exit", element: "gridline.session.terminal", details: ["session": id.uuidString, "exitCode": exitCode.map(String.init) ?? "unknown"])
+    }
+
+    func recordTerminalTargetIfInspectorOpen() {
+        guard DebugEvents.isInspectorOpen else { return }
+        DebugEvents.record("terminal.targeted", element: "gridline.session.terminal.\(id.uuidString)", details: [
+            "session": id.uuidString,
+            "groupID": groupID.uuidString,
+            "groupName": groupName,
+            "kind": kind.rawValue
+        ])
     }
 }
 
@@ -280,8 +498,10 @@ final class WorkspaceStore: ObservableObject {
             sessions = saved.sessions.filter { item in
                 saved.groups.contains(where: { $0.id == item.groupID })
             }.map { item in
-                let directory = saved.groups.first(where: { $0.id == item.groupID })?.directory ?? NSHomeDirectory()
-                return TerminalSession(saved: item, directory: directory)
+                let groupDirectory = saved.groups.first(where: { $0.id == item.groupID })?.directory ?? NSHomeDirectory()
+                let directory = item.workingDirectory ?? groupDirectory
+                let groupName = saved.groups.first(where: { $0.id == item.groupID })?.name ?? "Unknown Workgroup"
+                return TerminalSession(saved: item, directory: directory, groupName: groupName)
             }
         } else {
             let group = SavedGroup(id: UUID(), name: "Working on webapp", directory: NSHomeDirectory(), isCollapsed: false)
@@ -536,13 +756,18 @@ final class WorkspaceStore: ObservableObject {
         let saved = SavedSession(
             id: UUID(), groupID: group.id, kind: kind,
             label: kind == .codex ? "Codex" : "Shell",
-            followsTerminalTitle: true
+            followsTerminalTitle: true,
+            workingDirectory: group.directory
         )
-        return TerminalSession(saved: saved, directory: group.directory)
+        return TerminalSession(saved: saved, directory: group.directory, groupName: group.name)
     }
 
     private func wireChanges() {
-        sessions.forEach { $0.onChange = { [weak self] in self?.changed() } }
+        sessions.forEach { session in
+            let groupName = groups.first(where: { $0.id == session.groupID })?.name ?? "Unknown Workgroup"
+            session.updateGroupName(groupName)
+            session.onChange = { [weak self] in self?.changed() }
+        }
     }
 
     private func changed() {
@@ -554,6 +779,7 @@ final class WorkspaceStore: ObservableObject {
                 kind: $0.kind,
                 label: $0.label,
                 followsTerminalTitle: $0.followsTerminalTitle,
+                workingDirectory: $0.currentDirectory,
                 fontSize: Double($0.fontSize),
                 terminalHeight: Double($0.terminalHeight)
             )
@@ -566,12 +792,27 @@ final class WorkspaceStore: ObservableObject {
 
 struct TerminalPane: NSViewRepresentable {
     let session: TerminalSession
+    func makeCoordinator() -> Coordinator { Coordinator(session: session) }
+
     func makeNSView(context: Context) -> LocalProcessTerminalView {
+        installTargetGesture(on: session.terminal, coordinator: context.coordinator)
         applyAccessibilityContext(to: session.terminal)
         return session.terminal
     }
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
+        installTargetGesture(on: nsView, coordinator: context.coordinator)
         applyAccessibilityContext(to: nsView)
+    }
+
+    @MainActor
+    private func installTargetGesture(on view: LocalProcessTerminalView, coordinator: Coordinator) {
+        guard coordinator.clickGesture == nil else { return }
+        let gesture = NSClickGestureRecognizer(target: coordinator, action: #selector(Coordinator.terminalClicked(_:)))
+        gesture.buttonMask = 0x1
+        gesture.delaysPrimaryMouseButtonEvents = false
+        gesture.delegate = coordinator
+        view.addGestureRecognizer(gesture)
+        coordinator.clickGesture = gesture
     }
 
     @MainActor
@@ -580,6 +821,25 @@ struct TerminalPane: NSViewRepresentable {
         view.setAccessibilityIdentifier("gridline.session.terminal.\(session.id.uuidString)")
         view.setAccessibilityLabel("\(session.label) \(kind) terminal")
         view.setAccessibilityHelp("Terminal session \(session.id.uuidString), work group \(session.groupID.uuidString). Terminal text and keystrokes are not recorded by Gridline debug events.")
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSGestureRecognizerDelegate {
+        let session: TerminalSession
+        weak var clickGesture: NSClickGestureRecognizer?
+
+        init(session: TerminalSession) {
+            self.session = session
+        }
+
+        @objc func terminalClicked(_ gesture: NSClickGestureRecognizer) {
+            guard gesture.state == .ended else { return }
+            session.recordTerminalTargetIfInspectorOpen()
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: NSGestureRecognizer) -> Bool {
+            true
+        }
     }
 }
 
@@ -637,6 +897,7 @@ struct WorkspaceView: View {
     @StateObject private var voiceTodo = VoiceTodoModel()
     @StateObject private var codexUsage = CodexUsageStatus()
     @StateObject private var providerUsage = ProviderUsageStatus()
+    @StateObject private var terminalUsage = TerminalUsageStatus()
     @State private var editingGroup: UUID?
     @State private var groupDraft = ""
     @State private var editingSession: UUID?
@@ -647,11 +908,13 @@ struct WorkspaceView: View {
     @State private var showingDirectoryPrompt = false
     @State private var isGroupSidebarExpanded = false
     @State private var isWorkspaceActionsExpanded = false
+    @State private var isPonytailVendorUpdateExpanded = false
     @State private var highlightedGroup: UUID?
     @State private var showingSkillScriptOutput = false
     @State private var isSkillScriptDropdownExpanded = false
     @State private var selectedAppTab = "workspace"
     @State private var showingVoiceTodo = false
+    @State private var didStartTerminalUsageUITest = false
 
     private var template: GridlineTemplate { templateStore.activeTemplate }
 
@@ -743,9 +1006,28 @@ struct WorkspaceView: View {
             }
         }
         .background(template.palette.canvas)
-        .onAppear { providerUsage.updateTerminals(workspace.sessions) }
+        .sheet(isPresented: $isPonytailVendorUpdateExpanded) {
+            PonytailVendorUpdateView(palette: template.palette)
+        }
+        .onAppear {
+            terminalUsage.updateGroupNames(workspace.groups)
+            providerUsage.updateTerminals(workspace.sessions)
+            terminalUsage.updateTerminals(workspace.sessions)
+            if !didStartTerminalUsageUITest,
+               let reportURL = TerminalUsageUITestRunner.reportURLFromArguments {
+                didStartTerminalUsageUITest = true
+                Task { @MainActor in
+                    let runner = TerminalUsageUITestRunner(workspace: workspace, usage: terminalUsage)
+                    await runner.run(reportURL: reportURL)
+                }
+            }
+        }
+        .onChange(of: workspace.groups.map { "\($0.id.uuidString)|\($0.name)" }) { _ in
+            terminalUsage.updateGroupNames(workspace.groups)
+        }
         .onChange(of: workspace.sessions.map(\.id)) { _ in
             providerUsage.updateTerminals(workspace.sessions)
+            terminalUsage.updateTerminals(workspace.sessions)
         }
         .foregroundStyle(template.palette.primaryText)
         .overlay {
@@ -821,10 +1103,16 @@ struct WorkspaceView: View {
             }
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityIdentifier("gridline.workspace.defaultDirectorySummary")
-            template.makeUsageStatusView(providerUsage.snapshot, codexUsage)
+            template.makeUsageStatusView(providerUsage.snapshot, codexUsage, terminalUsage)
                 .padding(.leading, 6)
             Spacer()
-            Button { isWorkspaceActionsExpanded.toggle() } label: {
+            Button {
+                let isPresented = !isWorkspaceActionsExpanded
+                isWorkspaceActionsExpanded = isPresented
+                DebugEvents.record("workspace.utilityMenuToggled", element: "gridline.workspace.utilityMenu", details: [
+                    "expanded": String(isPresented)
+                ])
+            } label: {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 13, weight: .medium))
                     .frame(width: 30, height: 25)
@@ -856,6 +1144,19 @@ struct WorkspaceView: View {
                     ) {
                         isWorkspaceActionsExpanded = false
                         showingDirectoryPrompt = true
+                    }
+
+                    if Bundle.main.bundleIdentifier == "local.gridline.terminal" {
+                        MainTemplateDropdownActionRow(
+                            title: "Ponytail source…",
+                            subtitle: "Pull updates to Gridline's shared vendor",
+                            systemImage: "arrow.triangle.2.circlepath",
+                            tint: template.palette.accent,
+                            identifier: "gridline.workspace.ponytailSource"
+                        ) {
+                            isWorkspaceActionsExpanded = false
+                            isPonytailVendorUpdateExpanded = true
+                        }
                     }
 
                     MainTemplateDropdownActionRow(
@@ -1020,7 +1321,9 @@ struct WorkspaceView: View {
             editingGroup: $editingGroup,
             groupDraft: $groupDraft,
             editingSession: $editingSession,
-            sessionDraft: $sessionDraft
+            sessionDraft: $sessionDraft,
+            terminalUsage: terminalUsage.snapshots,
+            terminalUsageUpdatesEnabled: terminalUsage.updatesEnabled
         ))
     }
 

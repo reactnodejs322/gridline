@@ -15,6 +15,11 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+try:
+    from gridline_trace import stage as trace_stage
+except ImportError:
+    def trace_stage(*args, **kwargs) -> None:
+        return None
 
 SESSION_ROOT = Path.home() / ".claude" / "projects"
 WINDOW = timedelta(days=7)
@@ -84,6 +89,7 @@ def estimate(model: str, usage: dict[str, Any]) -> float | None:
 
 
 def snapshot(now: datetime | None = None) -> dict[str, Any]:
+    trace_stage("claude_usage", "scan_sessions", "started")
     end = now or datetime.now(timezone.utc)
     start = end - WINDOW
     total_usd = 0.0
@@ -128,12 +134,14 @@ def snapshot(now: datetime | None = None) -> dict[str, Any]:
                             total_usd += amount
             except OSError:
                 continue
-    except OSError:
+    except OSError as error:
+        trace_stage("claude_usage", "scan_sessions", "failed", error)
         return {
             "provider": "claude", "amountUSD": None, "available": False,
             "windowDays": 7, "unpricedModels": {},
         }
 
+    trace_stage("claude_usage", "scan_sessions", "completed", records=records)
     return {
         "provider": "claude",
         "amountUSD": round(total_usd, 6),
