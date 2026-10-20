@@ -28,6 +28,7 @@ struct WorkspaceSnapshot: Codable {
     var groups: [SavedGroup]
     var sessions: [SavedSession]
     var defaultDirectory: String?
+    var columns: Int?
 }
 
 struct WorkspaceDirectoryEntry: Identifiable {
@@ -383,6 +384,19 @@ final class TerminalSession: NSObject, ObservableObject, Identifiable, LocalProc
         onChange?()
     }
 
+    func openInVSCode() {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: currentDirectory, isDirectory: &isDirectory), isDirectory.boolValue else { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["code", "."]
+        process.currentDirectoryURL = URL(fileURLWithPath: currentDirectory, isDirectory: true)
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        process.environment = environment
+        try? process.run()
+    }
+
     func updateGroupName(_ value: String) {
         guard groupName != value else { return }
         groupName = value
@@ -494,6 +508,7 @@ final class WorkspaceStore: ObservableObject {
         if let data = try? Data(contentsOf: saveURL),
            let saved = try? JSONDecoder().decode(WorkspaceSnapshot.self, from: data) {
             groups = saved.groups
+            columns = min(max(saved.columns ?? 3, 1), 3)
             defaultDirectory = saved.defaultDirectory ?? saved.groups.first?.directory ?? NSHomeDirectory()
             sessions = saved.sessions.filter { item in
                 saved.groups.contains(where: { $0.id == item.groupID })
@@ -748,8 +763,10 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func setColumns(_ value: Int) {
+        guard (1...3).contains(value), columns != value else { return }
         columns = value
         DebugEvents.record("layout.columnsChanged", element: "gridline.layout.columns", details: ["columns": String(value)])
+        changed()
     }
 
     private func makeSession(group: SavedGroup, kind: SessionKind) -> TerminalSession {
@@ -784,7 +801,7 @@ final class WorkspaceStore: ObservableObject {
                 terminalHeight: Double($0.terminalHeight)
             )
         }
-        let data = try? JSONEncoder().encode(WorkspaceSnapshot(groups: groups, sessions: savedSessions, defaultDirectory: defaultDirectory))
+        let data = try? JSONEncoder().encode(WorkspaceSnapshot(groups: groups, sessions: savedSessions, defaultDirectory: defaultDirectory, columns: columns))
         if let data { try? data.write(to: saveURL, options: .atomic) }
         objectWillChange.send()
     }

@@ -48,6 +48,7 @@ cp -R "hooks/." "$APP/Contents/Resources/hooks/"
 cp "../hook_vendor/ponytail/hooks/ponytail-map.js" "$APP/Contents/Resources/hooks/ponytail-map.js"
 cp "../hook_vendor/ponytail/LICENSE" "$APP/Contents/Resources/hooks/ponytail-LICENSE"
 cp "../hook_vendor/ponytail/assets/logo-dark.png" "$APP/Contents/Resources/ponytail-logo.png"
+cp "assets/rust-mascot.png" "$APP/Contents/Resources/rust-mascot.png"
 "$(pwd)/build-app-icon.sh" "$ICON_SOURCE" "$APP/Contents/Resources/Gridline.icns" Gridline
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

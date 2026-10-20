@@ -7,7 +7,7 @@
 | File | Responsibility |
 | --- | --- |
 | `MainTemplateDefinition.swift` | Defines the stable ID `main_template`, display name `Main`, palette values, and factories for the work-group card and top usage status. |
-| `MainTemplateWorkGroupCard.swift` | Defines the colored work-group terminal tile, model/IN-OUT-TOTAL usage label, usage-details popover, and terminal-action dropdown. |
+| `MainTemplateWorkGroupCard.swift` | Defines the colored work-group terminal tile, hook-backed Markdown file indicators, model/IN-OUT-TOTAL usage label, usage-details popover, and terminal-action dropdown. |
 | `MainTemplateUsageStatusView.swift` | Renders separate cyan weekly provider meters from shared snapshots; ChatGPT uses the reported allowance and Claude uses its rolling seven-day estimate. Its ChatGPT dropdown preserves the meter and offers allowance controls plus one global per-terminal usage control that pauses monitoring and hides/shows the IN/OUT rows in every workgroup. |
 | `MainTemplateDropdownPanel.swift` | Reusable palette-aware dropdown panel shell. Skill scripts, workspace controls, directory prompt, work-group actions, and usage settings share its bordered surface. |
 | `MainTemplateDropdownActionRow.swift` | Reusable hoverable action row for dropdown panels, with a title, optional subtitle, icon, stable Accessibility ID, and action. |

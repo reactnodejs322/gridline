@@ -32,7 +32,11 @@ enum GridlineCodeContext {
         case let id where id.hasPrefix("gridline.group.hooks."):
             return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → work-group ellipsis → Project hooks for this group; installer UI/state is in gridline/Sources/Gridline/CodexHooks.swift, project config merging is in gridline/hooks/install_project_hooks.py, and installed Codex runtime hooks are in gridline/hooks/."
         case let id where id.hasPrefix("gridline.group.ponytailInstalled."):
-            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → detected Ponytail project icon → editable modal for this work group's .codex/ponytail.md in MainTemplatePonytailDocumentViewer.swift; install detection uses CodexHooksPanelModel and gridline/hooks/install_project_hooks.py."
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → detected Ponytail project icon → editable .codex/ponytail.md modal in MainTemplateMarkdownDocumentViewer.swift; install detection uses CodexHooksPanelModel and gridline/hooks/install_project_hooks.py."
+        case let id where id.hasPrefix("gridline.group.rustSkillFile."):
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → detected Rust skill file icon → editable .codex/RUST_SKILL.md modal in MainTemplateMarkdownDocumentViewer.swift."
+        case let id where id.hasPrefix("gridline.group.systemDesignDocument."):
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → detected map design hook → editable app_design/this_app_design_today.md modal in MainTemplateMarkdownDocumentViewer.swift."
         case "gridline.workspace.tokenUsage":
             return "gridline/template/main_template/MainTemplateUsageStatusView.swift renders the visible meter and opens refresh settings when clicked. The persistent Codex allowance monitor and refresh preferences are in gridline/Sources/Gridline/ProviderUsageService.swift; the stream reader is gridline/usage/monitor.py."
         case "gridline.workspace.usageRefresh.auto", "gridline.workspace.usageRefresh.interval", "gridline.workspace.usageRefresh.intervalEditor", "gridline.workspace.usageRefresh.applyCustom":
@@ -119,6 +123,8 @@ enum GridlineCodeContext {
         case "gridline.workspace.directoryCommand", "gridline.workspace.defaultDirectory": return "workspace.defaultDirectoryChanged; workspace.directoryPrinted; workspace.directoryListed; workspace.directorySelected"
         case let id where id.hasPrefix("gridline.group.addSession."): return "workgroup.actionsMenuToggled; provider.hooksPanelOpened; provider.hooksConfigured"
         case let id where id.hasPrefix("gridline.group.ponytailInstalled."): return "provider.ponytailDocumentOpened; provider.ponytailDocumentSaved"
+        case let id where id.hasPrefix("gridline.group.rustSkillFile."): return "provider.rustSkillDocumentOpened; provider.rustSkillDocumentSaved"
+        case let id where id.hasPrefix("gridline.group.systemDesignDocument."): return "provider.systemDesignDocumentOpened; provider.systemDesignDocumentSaved"
         case let id where id.hasPrefix("gridline.group.hooks.back."): return "No direct action event expected; returns to the work-group actions menu."
         case let id where id.hasPrefix("gridline.group.hooks."): return "provider.hooksPanelOpened; provider.hooksConfigured; provider.compactionStarted; provider.compactionCompleted"
         case "gridline.workspace.groupSidebar": return "workspace.groupSidebarToggled"
@@ -181,6 +187,8 @@ enum GridlineCodeContext {
         case "gridline.session.newCodex": return "Create a new Codex terminal session."
         case let id where id.hasPrefix("gridline.group.addSession."): return "Open this work group's actions, including the project-specific Ponytail and Codex hooks settings."
         case let id where id.hasPrefix("gridline.group.ponytailInstalled."): return "Open and edit this work group's .codex/ponytail.md from the Ponytail installed indicator."
+        case let id where id.hasPrefix("gridline.group.rustSkillFile."): return "Open and edit this work group's .codex/RUST_SKILL.md from the Rust mascot icon."
+        case let id where id.hasPrefix("gridline.group.systemDesignDocument."): return "Open and edit this work group's map system design guide."
         case "gridline.layout.columns": return "Change the workspace grid column count."
         case "gridline.workspace.title": return "Open Workspace controls to change the default starting folder or access workspace actions."
         case "gridline.workspace.utilityMenu": return "Open compact workspace actions, including Ponytail source management, workgroup navigation, directory commands, skill scripts, and grid layout."

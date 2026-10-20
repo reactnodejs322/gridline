@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/bryan/Desktop/myllm/.codex/hooks/gridline/ponytail_context.cjs session-start",
+            "timeout": 10,
+            "statusMessage": "Loading Ponytail project context"
+          }
+        ],
+        "matcher": "startup|resume|clear|compact"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/bryan/Desktop/myllm/.codex/hooks/gridline/ponytail_context.cjs prompt-submit",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/bryan/Desktop/myllm/.codex/hooks/gridline/ponytail_context.cjs post-tool",
+            "timeout": 10,
+            "statusMessage": "Refreshing Ponytail project map"
+          }
+        ],
+        "matcher": "Bash|apply_patch"
+      }
+    ]
+  }
+}

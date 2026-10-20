@@ -36,7 +36,7 @@ let package = Package(
                 "template/main_template/MainTemplateDropdownActionRow.swift",
                 "template/main_template/MainTemplateDropdownPanel.swift",
                 "template/main_template/MainTemplateWorkGroupCard.swift",
-                "template/main_template/MainTemplatePonytailDocumentViewer.swift",
+                "template/main_template/MainTemplateMarkdownDocumentViewer.swift",
                 "template/main_template/MainTemplateUsageStatusView.swift"
             ],
             resources: [.copy("usage")]

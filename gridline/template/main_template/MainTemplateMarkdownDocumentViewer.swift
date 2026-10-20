@@ -1,23 +1,27 @@
 import SwiftUI
 
-/// Edits the Ponytail guidance file belonging to one work group's project.
-struct MainTemplatePonytailDocumentViewer: View {
+/// Edits a Markdown document belonging to one work group's project.
+struct MainTemplateMarkdownDocumentViewer: View {
     let groupID: UUID
     let groupName: String
     let projectPath: String
+    let documentPath: String
+    let identifierStem: String
+    let eventStem: String
+    let editorLabel: String
 
     @Environment(\.dismiss) private var dismiss
     @State private var contents = ""
     @State private var originalContents = ""
-    @State private var status = "Loading ponytail.md…"
+    @State private var status = "Loading document…"
     @State private var isLoaded = false
     @State private var isSaving = false
     @State private var showingDiscardConfirmation = false
 
     private var documentURL: URL {
-        URL(fileURLWithPath: projectPath, isDirectory: true)
-            .appendingPathComponent(".codex", isDirectory: true)
-            .appendingPathComponent("ponytail.md", isDirectory: false)
+        documentPath.split(separator: "/").reduce(URL(fileURLWithPath: projectPath, isDirectory: true)) {
+            $0.appendingPathComponent(String($1), isDirectory: false)
+        }
     }
 
     private var hasUnsavedChanges: Bool {
@@ -30,18 +34,18 @@ struct MainTemplatePonytailDocumentViewer: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(groupName)
                         .font(.system(size: 14, weight: .semibold))
-                    Text(".codex/ponytail.md")
+                    Text(documentPath)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("Cancel") { requestDismiss() }
                     .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("gridline.group.ponytailDocument.cancel.\(groupID.uuidString)")
+                    .accessibilityIdentifier("gridline.group.\(identifierStem).cancel.\(groupID.uuidString)")
                 Button(isSaving ? "Saving…" : "Save") { save() }
                     .keyboardShortcut("s", modifiers: .command)
                     .disabled(!hasUnsavedChanges || isSaving)
-                    .accessibilityIdentifier("gridline.group.ponytailDocument.save.\(groupID.uuidString)")
+                    .accessibilityIdentifier("gridline.group.\(identifierStem).save.\(groupID.uuidString)")
             }
             .padding(16)
 
@@ -53,14 +57,14 @@ struct MainTemplatePonytailDocumentViewer: View {
                     .textSelection(.enabled)
                     .scrollContentBackground(.hidden)
                     .padding(10)
-                    .accessibilityLabel("Ponytail project instructions")
-                    .accessibilityIdentifier("gridline.group.ponytailDocument.editor.\(groupID.uuidString)")
+                    .accessibilityLabel(editorLabel)
+                    .accessibilityIdentifier("gridline.group.\(identifierStem).editor.\(groupID.uuidString)")
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "doc.text")
                         .font(.system(size: 24))
                         .foregroundStyle(.secondary)
-                    Text("Couldn’t open ponytail.md")
+                    Text("Couldn’t open \(URL(fileURLWithPath: documentPath).lastPathComponent)")
                         .font(.system(size: 14, weight: .semibold))
                     Text(status)
                         .font(.system(size: 11))
@@ -83,7 +87,7 @@ struct MainTemplatePonytailDocumentViewer: View {
             .padding(.vertical, 9)
         }
         .frame(minWidth: 650, idealWidth: 820, minHeight: 440, idealHeight: 620)
-        .accessibilityIdentifier("gridline.group.ponytailDocument.modal.\(groupID.uuidString)")
+        .accessibilityIdentifier("gridline.group.\(identifierStem).modal.\(groupID.uuidString)")
         .onAppear(perform: load)
         .confirmationDialog(
             "Discard unsaved changes?",
@@ -93,7 +97,7 @@ struct MainTemplatePonytailDocumentViewer: View {
             Button("Discard Changes", role: .destructive) { dismiss() }
             Button("Keep Editing", role: .cancel) {}
         } message: {
-            Text("Your edits to .codex/ponytail.md have not been saved.")
+            Text("Your edits to \(documentPath) have not been saved.")
         }
     }
 
@@ -108,10 +112,10 @@ struct MainTemplatePonytailDocumentViewer: View {
             let text = try String(contentsOf: documentURL, encoding: .utf8)
             contents = text
             originalContents = text
-            status = "Loaded · edits are saved to this project’s .codex/ponytail.md"
+            status = "Loaded · edits are saved to this project’s \(documentPath)"
             isLoaded = true
         } catch {
-            status = "The project’s .codex/ponytail.md could not be read."
+            status = "The project’s \(documentPath) could not be read."
         }
     }
 
@@ -121,16 +125,16 @@ struct MainTemplatePonytailDocumentViewer: View {
         do {
             try contents.write(to: documentURL, atomically: true, encoding: .utf8)
             originalContents = contents
-            status = "Saved · .codex/ponytail.md"
+            status = "Saved · \(documentPath)"
             isSaving = false
-            DebugEvents.record("provider.ponytailDocumentSaved", element: "gridline.group.ponytailDocument.save.\(groupID.uuidString)", details: [
+            DebugEvents.record("provider.\(eventStem)Saved", element: "gridline.group.\(identifierStem).save.\(groupID.uuidString)", details: [
                 "groupID": groupID.uuidString,
                 "groupName": groupName,
-                "file": ".codex/ponytail.md",
+                "file": documentPath,
                 "characterCount": String(contents.unicodeScalars.count)
             ])
         } catch {
-            status = "Could not save .codex/ponytail.md. Check that the file is writable."
+            status = "Could not save \(documentPath). Check that the file is writable."
             isSaving = false
         }
     }

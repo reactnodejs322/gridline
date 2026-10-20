@@ -91,6 +91,7 @@ fingerprint() {
     find "$ROOT/gridline/hooks" -type f \( -name '*.py' -o -name '*.cjs' -o -name '*.template' \) -exec stat -f '%m %N' {} \; 2>/dev/null
     stat -f '%m %N' "$ROOT/logo/Gridline2x.png" "$ROOT/gridline/Package.swift" "$ROOT/gridline/build-app-icon.sh" "$ROOT/gridline/build-app.sh" "$ROOT/gridline_debug/build-inspector.sh" "$ROOT/VERSION" 2>/dev/null
     stat -f '%m %N' "$ROOT/hook_vendor/ponytail/VENDOR_VERSION" "$ROOT/hook_vendor/ponytail/hooks/ponytail-map.js" "$ROOT/hook_vendor/ponytail/LICENSE" "$ROOT/hook_vendor/ponytail/assets/logo-dark.png" 2>/dev/null
+    stat -f '%m %N' "$ROOT/gridline/assets/rust-mascot.png" 2>/dev/null
   } | sort | shasum -a 256 | cut -d ' ' -f 1
 }
 

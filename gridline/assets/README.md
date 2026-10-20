@@ -1,0 +1,1 @@
+`rust-mascot.png` is Ferris by Karen Rustad Tölva, from [rust-lang/rust-artwork](https://github.com/rust-lang/rust-artwork/tree/main/mascot). The upstream README states the artwork is dedicated to the public domain to the extent possible under law.

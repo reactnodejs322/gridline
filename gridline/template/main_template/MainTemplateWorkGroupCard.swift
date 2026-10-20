@@ -1,6 +1,58 @@
 import AppKit
 import SwiftUI
 
+private enum ProjectMarkdownDocument: String, CaseIterable, Hashable, Identifiable {
+    case systemDesign
+    case rustSkill
+    case ponytail
+
+    var id: String { rawValue }
+    var path: String {
+        switch self {
+        case .systemDesign: "app_design/this_app_design_today.md"
+        case .rustSkill: ".codex/RUST_SKILL.md"
+        case .ponytail: ".codex/ponytail.md"
+        }
+    }
+    var hookScript: String {
+        switch self {
+        case .systemDesign: "map_design_context.cjs"
+        case .rustSkill: "rust_skill_context.cjs"
+        case .ponytail: "ponytail_context.cjs"
+        }
+    }
+    var hookPath: String { self == .ponytail ? ".codex/hooks/gridline/ponytail_context.cjs" : ".codex/hooks/\(hookScript)" }
+    var identifierStem: String {
+        switch self {
+        case .systemDesign: "systemDesignDocument"
+        case .rustSkill: "rustSkillDocument"
+        case .ponytail: "ponytailDocument"
+        }
+    }
+    var eventStem: String { identifierStem }
+    var iconIdentifierStem: String {
+        switch self {
+        case .systemDesign: "systemDesignDocument"
+        case .rustSkill: "rustSkillFile"
+        case .ponytail: "ponytailInstalled"
+        }
+    }
+    var editorLabel: String {
+        switch self {
+        case .systemDesign: "Map system design"
+        case .rustSkill: "Rust skill instructions"
+        case .ponytail: "Ponytail project instructions"
+        }
+    }
+    var loadingDescription: String {
+        switch self {
+        case .systemDesign: "loaded at session start; map guidance is reminded on each prompt"
+        case .rustSkill: "loaded when the Rust hook detects a .rs tool operation"
+        case .ponytail: "loaded at session start and refreshed when the project map changes"
+        }
+    }
+}
+
 /// Main-skin presentation for a work group and its terminal label controls.
 /// State changes and process actions stay in WorkspaceStore/TerminalSession.
 struct MainTemplateWorkGroupCard: View {
@@ -15,17 +67,25 @@ struct MainTemplateWorkGroupCard: View {
     let terminalUsage: [UUID: TerminalUsageSnapshot]
     let terminalUsageUpdatesEnabled: Bool
     @StateObject private var ponytailStatus = CodexHooksPanelModel()
+    @State private var visibleProjectDocuments: Set<ProjectMarkdownDocument> = []
     @State private var showingActionsDropdown = false
     @State private var showingProjectHooks = false
-    @State private var showingPonytailDocument = false
+    @State private var showingProjectDocument: ProjectMarkdownDocument?
     @State private var showingUsageSession: UUID?
 
     private var palette: GridlineTemplate.Palette { template.palette }
     private var projectDirectory: String {
         groupSessions.first?.currentDirectory ?? group.directory
     }
+    private var projectMarkerDirectory: String {
+        ponytailStatus.projectPath ?? projectDirectory
+    }
     private var ponytailLogo: NSImage? {
         guard let url = Bundle.main.url(forResource: "ponytail-logo", withExtension: "png") else { return nil }
+        return NSImage(contentsOf: url)
+    }
+    private var rustMascot: NSImage? {
+        guard let url = Bundle.main.url(forResource: "rust-mascot", withExtension: "png") else { return nil }
         return NSImage(contentsOf: url)
     }
     private var tileColor: Color {
@@ -69,14 +129,16 @@ struct MainTemplateWorkGroupCard: View {
         .overlay(RoundedRectangle(cornerRadius: 5).stroke(tileColor.opacity(0.82), lineWidth: 1.25))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("gridline.group.card.\(group.id.uuidString)")
-        .sheet(isPresented: $showingPonytailDocument) {
-            if let projectPath = ponytailStatus.projectPath {
-                MainTemplatePonytailDocumentViewer(
-                    groupID: group.id,
-                    groupName: group.name,
-                    projectPath: projectPath
-                )
-            }
+        .sheet(item: $showingProjectDocument) { document in
+            MainTemplateMarkdownDocumentViewer(
+                groupID: group.id,
+                groupName: group.name,
+                projectPath: projectMarkerDirectory,
+                documentPath: document.path,
+                identifierStem: document.identifierStem,
+                eventStem: document.eventStem,
+                editorLabel: document.editorLabel
+            )
         }
         .onChange(of: showingActionsDropdown) { isPresented in
             if !isPresented {
@@ -86,6 +148,13 @@ struct MainTemplateWorkGroupCard: View {
         }
         .onAppear(perform: inspectPonytail)
         .onChange(of: projectDirectory) { _ in inspectPonytail() }
+        .task(id: projectMarkerDirectory) {
+            while !Task.isCancelled {
+                let documents = Self.configuredProjectDocuments(at: projectMarkerDirectory)
+                if visibleProjectDocuments != documents { visibleProjectDocuments = documents }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
     }
 
     private var groupHeader: some View {
@@ -125,35 +194,8 @@ struct MainTemplateWorkGroupCard: View {
             }
             Spacer(minLength: 2)
 
-            if ponytailStatus.ponytailInstalled {
-                Button {
-                    showingPonytailDocument = true
-                    DebugEvents.record("provider.ponytailDocumentOpened", element: "gridline.group.ponytailInstalled.\(group.id.uuidString)", details: [
-                        "groupID": group.id.uuidString,
-                        "groupName": group.name,
-                        "file": ".codex/ponytail.md"
-                    ])
-                } label: {
-                    Group {
-                        if let ponytailLogo {
-                            Image(nsImage: ponytailLogo)
-                                .resizable()
-                                .interpolation(.high)
-                                .aspectRatio(contentMode: .fit)
-                        } else {
-                            Image(systemName: "puzzlepiece.extension")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                        }
-                    }
-                    .frame(width: 14, height: 16)
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Edit this project’s .codex/ponytail.md")
-                .accessibilityLabel("Ponytail installed. Edit this project’s ponytail.md.")
-                .accessibilityIdentifier("gridline.group.ponytailInstalled.\(group.id.uuidString)")
+            ForEach(ProjectMarkdownDocument.allCases.filter { visibleProjectDocuments.contains($0) }) { document in
+                projectDocumentButton(document)
             }
 
             Button {
@@ -244,6 +286,17 @@ struct MainTemplateWorkGroupCard: View {
                                     .padding(.top, 4)
 
                                 MainTemplateDropdownActionRow(
+                                    title: "Code .",
+                                    subtitle: "Open this terminal’s current folder in VS Code",
+                                    systemImage: "chevron.left.forwardslash.chevron.right",
+                                    tint: palette.accent,
+                                    identifier: "gridline.session.openInVSCode.\(session.id.uuidString)"
+                                ) {
+                                    showingActionsDropdown = false
+                                    session.openInVSCode()
+                                }
+
+                                MainTemplateDropdownActionRow(
                                     title: "Rename terminal…",
                                     systemImage: "pencil",
                                     tint: palette.accent,
@@ -330,6 +383,71 @@ struct MainTemplateWorkGroupCard: View {
 
     private func inspectPonytail() {
         ponytailStatus.run(action: "inspect", directory: projectDirectory)
+    }
+
+    private static func configuredProjectDocuments(at root: String) -> Set<ProjectMarkdownDocument> {
+        let projectURL = URL(fileURLWithPath: root, isDirectory: true)
+        let hooksURL = projectURL.appendingPathComponent(".codex/hooks.json", isDirectory: false)
+        guard let data = try? Data(contentsOf: hooksURL),
+              let hooks = try? JSONSerialization.jsonObject(with: data) else { return [] }
+
+        func referencesHook(_ value: Any, named hookName: String) -> Bool {
+            if let string = value as? String { return string.contains(hookName) }
+            if let array = value as? [Any] { return array.contains { referencesHook($0, named: hookName) } }
+            if let object = value as? [String: Any] { return object.values.contains { referencesHook($0, named: hookName) } }
+            return false
+        }
+
+        return Set(ProjectMarkdownDocument.allCases.filter { document in
+            FileManager.default.fileExists(atPath: projectURL.appendingPathComponent(document.path).path) &&
+            FileManager.default.fileExists(atPath: projectURL.appendingPathComponent(document.hookPath).path) &&
+            referencesHook(hooks, named: document.hookScript)
+        })
+    }
+
+    @ViewBuilder
+    private func projectDocumentButton(_ document: ProjectMarkdownDocument) -> some View {
+        Button {
+            showingProjectDocument = document
+            DebugEvents.record("provider.\(document.eventStem)Opened", element: "gridline.group.\(document.iconIdentifierStem).\(group.id.uuidString)", details: [
+                "groupID": group.id.uuidString,
+                "groupName": group.name,
+                "file": document.path
+            ])
+        } label: {
+            Group {
+                switch document {
+                case .systemDesign:
+                    Image(systemName: "map")
+                        .font(.system(size: 14))
+                case .rustSkill:
+                    if let rustMascot {
+                        Image(nsImage: rustMascot)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                    } else {
+                        Image(systemName: "shippingbox")
+                    }
+                case .ponytail:
+                    if let ponytailLogo {
+                        Image(nsImage: ponytailLogo)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                    } else {
+                        Image(systemName: "puzzlepiece.extension")
+                    }
+                }
+            }
+            .frame(width: 16, height: 16)
+            .frame(width: 22, height: 22)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("\(document.path) · \(document.loadingDescription)")
+        .accessibilityLabel("Open \(document.editorLabel): \(document.path)")
+        .accessibilityIdentifier("gridline.group.\(document.iconIdentifierStem).\(group.id.uuidString)")
     }
 
     @ViewBuilder
