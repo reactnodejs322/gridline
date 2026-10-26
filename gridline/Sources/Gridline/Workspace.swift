@@ -262,14 +262,22 @@ final class GridlineTerminalView: LocalProcessTerminalView {
         resetSubmission()
     }
 
-    func sendTestSubmission(_ text: String) {
-        guard isSubmissionCountingEnabled else { return }
+    func stageText(_ text: String) {
         resetSubmission()
         typedScalarCount = text.unicodeScalars.count
         pendingInputScalarCount = typedScalarCount
         pendingPromptText = text
         send(txt: text)
+    }
+
+    func submitStagedText() {
         send(txt: "\r")
+    }
+
+    func sendTestSubmission(_ text: String) {
+        guard isSubmissionCountingEnabled else { return }
+        stageText(text)
+        submitStagedText()
     }
 
     private func resetSubmission() {
@@ -343,7 +351,7 @@ final class TerminalSession: NSObject, ObservableObject, Identifiable, LocalProc
             currentDirectory: directory
         )
         monitorCurrentDirectory()
-        DebugEvents.record("terminal.started", element: kind == .codex ? "gridline.session.codex" : "gridline.session.shell", details: ["kind": kind.rawValue, "session": id.uuidString, "directory": directory])
+        DebugEvents.record("terminal.started", element: kind == .codex ? "gridline.session.codex" : "gridline.session.shell", details: ["kind": kind.rawValue, "session": id.uuidString])
         if kind == .codex {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
                 guard let self, self.isRunning else { return }
@@ -529,6 +537,41 @@ final class WorkspaceStore: ObservableObject {
 
     func groupSessions(_ group: SavedGroup) -> [TerminalSession] {
         sessions.filter { $0.groupID == group.id }
+    }
+
+    func stagePrompt(_ text: String, to directory: String, activeProviders: [UUID: String]) -> [UUID] {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        let expanded = (directory as NSString).expandingTildeInPath
+        let targetPath = expanded.hasPrefix("/")
+            ? URL(fileURLWithPath: expanded).standardizedFileURL.path
+            : URL(fileURLWithPath: defaultDirectory, isDirectory: true)
+                .appendingPathComponent(expanded).standardizedFileURL.path
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: targetPath, isDirectory: &isDirectory), isDirectory.boolValue else { return [] }
+
+        let recipients = sessions.filter { session in
+            session.isRunning
+                && session.currentDirectory == targetPath
+                && ["codex", "claude"].contains(activeProviders[session.id] ?? "")
+        }
+        recipients.forEach { $0.terminal.stageText(text) }
+        return recipients.map(\.id)
+    }
+
+    func submitStagedPrompt(_ sessionIDs: [UUID], to directory: String, activeProviders: [UUID: String]) -> Int {
+        let expanded = (directory as NSString).expandingTildeInPath
+        let targetPath = expanded.hasPrefix("/")
+            ? URL(fileURLWithPath: expanded).standardizedFileURL.path
+            : URL(fileURLWithPath: defaultDirectory, isDirectory: true)
+                .appendingPathComponent(expanded).standardizedFileURL.path
+        let recipients = sessions.filter { session in
+            sessionIDs.contains(session.id)
+                && session.isRunning
+                && session.currentDirectory == targetPath
+                && ["codex", "claude"].contains(activeProviders[session.id] ?? "")
+        }
+        recipients.forEach { $0.terminal.submitStagedText() }
+        return recipients.count
     }
 
     func addGroup() {
@@ -925,6 +968,10 @@ struct WorkspaceView: View {
     @State private var showingDirectoryPrompt = false
     @State private var isGroupSidebarExpanded = false
     @State private var isWorkspaceActionsExpanded = false
+    @State private var isBroadcastPromptExpanded = false
+    @State private var broadcastDirectory = ""
+    @AppStorage("gridline.workspace.broadcastPrompt.draft") private var broadcastPromptDraft = ""
+    @State private var stagedBroadcastRecipients: [UUID]?
     @State private var isPonytailVendorUpdateExpanded = false
     @State private var highlightedGroup: UUID?
     @State private var showingSkillScriptOutput = false
@@ -1065,6 +1112,30 @@ struct WorkspaceView: View {
                 .transition(.opacity)
                 .zIndex(110)
             }
+            if isBroadcastPromptExpanded {
+                BroadcastPromptModalView(
+                    directory: $broadcastDirectory,
+                    message: $broadcastPromptDraft,
+                    stagedRecipients: $stagedBroadcastRecipients,
+                    baseDirectory: workspace.defaultDirectory,
+                    sessions: workspace.sessions,
+                    activeProviders: providerUsage.activeProviders,
+                    palette: template.palette,
+                    onStage: { text, path in
+                        workspace.stagePrompt(text, to: path, activeProviders: providerUsage.activeProviders)
+                    },
+                    onSubmit: { ids, path in
+                        workspace.submitStagedPrompt(ids, to: path, activeProviders: providerUsage.activeProviders)
+                    },
+                    onRestart: {
+                        isBroadcastPromptExpanded = false
+                        restartGridline()
+                    },
+                    onClose: { isBroadcastPromptExpanded = false }
+                )
+                .transition(.opacity)
+                .zIndex(120)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Gridline template: \(template.id)")
@@ -1079,6 +1150,37 @@ struct WorkspaceView: View {
         let isSuccessfulCD = isCD && output?.error == false
         commandOutput = isSuccessfulCD ? nil : output
         directoryCommand = ""
+    }
+
+    private func restartGridline() {
+        let gridlineID = "local.gridline.terminal"
+        guard let gridline = NSRunningApplication.runningApplications(withBundleIdentifier: gridlineID).first else { return }
+        let gridlineURL = Bundle.main.bundleURL
+
+        let waitForExit = """
+        alive() { [ "$1" = "-" ] || /bin/kill -0 "$1" 2>/dev/null; }
+        attempts=0
+        while alive "$1" && [ "$attempts" -lt 120 ]; do
+          /bin/sleep 0.1
+          attempts=$((attempts + 1))
+        done
+        if alive "$1"; then exit 1; fi
+        /usr/bin/open "$2"
+        """
+        let relauncher = Process()
+        relauncher.executableURL = URL(fileURLWithPath: "/bin/sh")
+        relauncher.arguments = [
+            "-c", waitForExit, "gridline-restart",
+            String(gridline.processIdentifier), gridlineURL.path,
+        ]
+        relauncher.standardOutput = FileHandle.nullDevice
+        relauncher.standardError = FileHandle.nullDevice
+        do {
+            try relauncher.run()
+        } catch {
+            return
+        }
+        gridline.terminate()
     }
 
     private func completeDirectoryCommand() {
@@ -1123,6 +1225,21 @@ struct WorkspaceView: View {
             template.makeUsageStatusView(providerUsage.snapshot, codexUsage, terminalUsage)
                 .padding(.leading, 6)
             Spacer()
+            if Bundle.main.bundleIdentifier == "local.gridline.terminal" {
+                Button {
+                    broadcastDirectory = workspace.sessions.first(where: \.isRunning)?.currentDirectory ?? workspace.defaultDirectory
+                    isBroadcastPromptExpanded = true
+                } label: {
+                    Image(systemName: "text.bubble")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 26, height: 25)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Broadcast a prompt to active Codex or Claude terminals")
+                .accessibilityLabel("Broadcast a prompt")
+                .accessibilityIdentifier("gridline.workspace.broadcastPrompt")
+            }
             Button {
                 let isPresented = !isWorkspaceActionsExpanded
                 isWorkspaceActionsExpanded = isPresented
@@ -1174,6 +1291,7 @@ struct WorkspaceView: View {
                             isWorkspaceActionsExpanded = false
                             isPonytailVendorUpdateExpanded = true
                         }
+
                     }
 
                     MainTemplateDropdownActionRow(
@@ -1355,6 +1473,200 @@ struct WorkspaceView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         audioTranscription.prepare(url)
         showingSkillScriptOutput = true
+    }
+}
+
+@MainActor
+private struct BroadcastPromptModalView: View {
+    @Binding var directory: String
+    @Binding var message: String
+    @Binding var stagedRecipients: [UUID]?
+    let baseDirectory: String
+    let sessions: [TerminalSession]
+    let activeProviders: [UUID: String]
+    let palette: GridlineTemplate.Palette
+    let onStage: (String, String) -> [UUID]
+    let onSubmit: ([UUID], String) -> Int
+    let onRestart: () -> Void
+    let onClose: () -> Void
+
+    @State private var dragOffset = CGSize.zero
+    @State private var dragStart = CGSize.zero
+    @State private var isDragging = false
+    @State private var statusMessage: String?
+
+    private var normalizedDirectory: String? {
+        let input = directory.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return nil }
+        let expanded = (input as NSString).expandingTildeInPath
+        let url = expanded.hasPrefix("/")
+            ? URL(fileURLWithPath: expanded)
+            : URL(fileURLWithPath: baseDirectory, isDirectory: true).appendingPathComponent(expanded)
+        return url.standardizedFileURL.path
+    }
+
+    private var matchingTerminals: [TerminalSession] {
+        guard let normalizedDirectory,
+              FileManager.default.fileExists(atPath: normalizedDirectory) else { return [] }
+        return sessions.filter { session in
+            session.isRunning
+                && session.currentDirectory == normalizedDirectory
+                && ["codex", "claude"].contains(activeProviders[session.id] ?? "")
+        }
+    }
+
+    private var promptLabel: String {
+        let host = ProcessInfo.processInfo.hostName.split(separator: ".").first.map(String.init) ?? "Mac"
+        let folder = normalizedDirectory.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "folder"
+        return "\(NSUserName())@\(host) \(folder) %"
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.opacity(0.58)
+                    .ignoresSafeArea()
+                    .onTapGesture(perform: onClose)
+
+                panel
+                    .frame(width: min(520, max(320, geometry.size.width - 32)))
+                    .offset(dragOffset)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            }
+        }
+        .accessibilityIdentifier("gridline.workspace.broadcastPrompt.modal")
+    }
+
+    private var panel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "text.bubble.fill")
+                    .foregroundStyle(palette.accent)
+                Text("SEND TO TERMINALS")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close prompt broadcaster")
+                .accessibilityIdentifier("gridline.workspace.broadcastPrompt.close")
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 2)
+                .onChanged { value in
+                    if !isDragging {
+                        dragStart = dragOffset
+                        isDragging = true
+                    }
+                    dragOffset = CGSize(
+                        width: dragStart.width + value.translation.width,
+                        height: dragStart.height + value.translation.height
+                    )
+                }
+                .onEnded { _ in isDragging = false })
+            .help("Drag to move this panel")
+
+            Text(promptLabel)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(palette.accent)
+                .accessibilityIdentifier("gridline.workspace.broadcastPrompt.shellPath")
+
+            HStack(spacing: 8) {
+                Image(systemName: "folder")
+                    .foregroundStyle(.secondary)
+                TextField("Target folder path", text: $directory)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .disabled(stagedRecipients != nil)
+                    .onChange(of: directory) { _ in statusMessage = nil }
+                    .accessibilityLabel("Target folder path")
+                    .accessibilityIdentifier("gridline.workspace.broadcastPrompt.directory")
+            }
+            .padding(9)
+            .background(palette.controlSurface, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(palette.border, lineWidth: 1))
+
+            HStack(alignment: .bottom, spacing: 9) {
+                TextField("Message to send", text: $message)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .padding(10)
+                    .background(palette.controlSurface, in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(palette.border, lineWidth: 1))
+                    .disabled(stagedRecipients != nil)
+                    .onChange(of: message) { _ in statusMessage = nil }
+                    .onSubmit(pressEnter)
+                    .accessibilityLabel("Message to send to matching terminals")
+                    .accessibilityIdentifier("gridline.workspace.broadcastPrompt.message")
+
+                Button(action: pressEnter) {
+                    Label(stagedRecipients == nil ? "Enter" : "Submit", systemImage: "return")
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 9)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(palette.accent)
+                .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || (stagedRecipients == nil && matchingTerminals.isEmpty))
+                .accessibilityLabel(stagedRecipients == nil ? "Enter text into terminals" : "Submit text to terminals")
+                .accessibilityIdentifier("gridline.workspace.broadcastPrompt.send")
+            }
+
+            Text(statusMessage ?? targetSummary)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("gridline.workspace.broadcastPrompt.status")
+
+            Divider().overlay(palette.border)
+
+            HStack {
+                Button(action: onRestart) {
+                    Label("Restart Gridline", systemImage: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("gridline.workspace.broadcastPrompt.restartGridline")
+                Spacer()
+                Text("Active terminal sessions will end")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(palette.border, lineWidth: 1))
+        .shadow(color: .black.opacity(0.42), radius: 20, x: 0, y: 10)
+        .foregroundStyle(palette.primaryText)
+    }
+
+    private var targetSummary: String {
+        let count = matchingTerminals.count
+        return count == 0
+            ? "No active Codex or Claude terminal matches this folder."
+            : "\(count) active Codex or Claude terminal\(count == 1 ? "" : "s") in this folder."
+    }
+
+    private func pressEnter() {
+        if let stagedRecipients {
+            let submitted = onSubmit(stagedRecipients, directory)
+            statusMessage = submitted > 0
+                ? "Submitted to \(submitted) terminal\(submitted == 1 ? "" : "s"). Draft kept."
+                : "Those terminals are no longer active. Press Enter to stage the draft again."
+            self.stagedRecipients = nil
+            return
+        }
+        let recipients = onStage(message, directory)
+        guard !recipients.isEmpty else {
+            statusMessage = "No matching active Codex or Claude terminal received the text."
+            return
+        }
+        stagedRecipients = recipients
+        statusMessage = "Text placed in \(recipients.count) terminal input\(recipients.count == 1 ? "" : "s"). Press Enter again to submit."
     }
 }
 

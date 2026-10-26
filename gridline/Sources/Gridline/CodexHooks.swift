@@ -7,6 +7,10 @@ struct CodexHookInstallResult: Decodable {
     let ponytailInstalled: Bool?
     let compactionLoggingEnabled: Bool?
     let ponytailFileExists: Bool?
+    let aiWorkflowGuidesAvailable: Bool?
+    let agentInstructionsFileExists: Bool?
+    let agentInstructionsFileName: String?
+    let docsFolderConflict: Bool?
     let message: String?
 }
 
@@ -16,6 +20,9 @@ final class CodexHooksPanelModel: ObservableObject {
     @Published var status = ""
     @Published var ponytailInstalled = false
     @Published var compactionLoggingEnabled = false
+    @Published var docsFolderConflict = false
+    @Published var agentInstructionsFileExists = false
+    @Published var agentInstructionsFileName = "AGENTS.md"
     @Published var projectPath: String?
 
     func run(action: String, directory: String, completion: ((CodexHookInstallResult?) -> Void)? = nil) {
@@ -24,6 +31,10 @@ final class CodexHooksPanelModel: ObservableObject {
             ponytailInstalled = false
             compactionLoggingEnabled = false
             projectPath = nil
+        } else if action == "install-ai-workflow" {
+            docsFolderConflict = false
+            agentInstructionsFileExists = false
+            agentInstructionsFileName = "AGENTS.md"
         }
         guard let resources = Bundle.main.resourceURL?.appendingPathComponent("hooks", isDirectory: true),
               FileManager.default.fileExists(atPath: resources.appendingPathComponent("install_project_hooks.py").path),
@@ -35,11 +46,12 @@ final class CodexHooksPanelModel: ObservableObject {
         }
 
         isBusy = true
-        status = action == "inspect" ? "Checking project hooks…" : "Updating project hooks…"
+        status = action == "inspect" ? "Checking project hooks…"
+            : action == "install-ai-workflow" ? "Checking Gridline workflow guides…"
+            : "Updating project hooks…"
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let process = Process()
             let output = Pipe()
-            let errors = Pipe()
             process.executableURL = URL(fileURLWithPath: python)
             process.arguments = [
                 resources.appendingPathComponent("install_project_hooks.py").path,
@@ -49,26 +61,41 @@ final class CodexHooksPanelModel: ObservableObject {
             ]
             process.environment = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", "PYTHONDONTWRITEBYTECODE": "1"]
             process.standardOutput = output
-            process.standardError = errors
+            DebugEvents.configurePythonProcess(
+                process,
+                workflow: "project_hooks",
+                script: "install_project_hooks.py",
+                swiftStage: "CodexHooksPanelModel.run"
+            )
+            process.terminationHandler = { finished in
+                DebugEvents.recordPythonProcessFinished(
+                    workflow: "project_hooks",
+                    script: "install_project_hooks.py",
+                    swiftStage: "CodexHooksPanelModel.run",
+                    exitCode: finished.terminationStatus
+                )
+            }
 
             do {
                 try process.run()
                 let outputData = output.fileHandleForReading.readDataToEndOfFile()
-                let errorData = errors.fileHandleForReading.readDataToEndOfFile()
                 process.waitUntilExit()
                 let result = try? JSONDecoder().decode(CodexHookInstallResult.self, from: outputData)
-                let errorText = String(decoding: errorData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.isBusy = false
                     if let result {
-                        self.ponytailInstalled = result.ponytailInstalled ?? false
-                        self.compactionLoggingEnabled = result.compactionLoggingEnabled ?? false
+                        if let installed = result.ponytailInstalled { self.ponytailInstalled = installed }
+                        if let enabled = result.compactionLoggingEnabled { self.compactionLoggingEnabled = enabled }
+                        if let conflict = result.docsFolderConflict { self.docsFolderConflict = conflict }
+                        if let fileExists = result.agentInstructionsFileExists { self.agentInstructionsFileExists = fileExists }
+                        if let fileName = result.agentInstructionsFileName { self.agentInstructionsFileName = fileName }
                         self.projectPath = result.projectPath ?? directory
                         if result.ok {
                             let project = result.projectPath ?? directory
                             switch action {
                             case "inspect": self.status = "Project: \(project)"
+                            case "install-ai-workflow": self.status = "AI workflow guides ready from Gridline resources."
                             case "install-ponytail": self.status = "Ponytail is installed in \(project). Existing Ponytail rules were kept."
                             case "enable-compactions": self.status = "Codex compaction logging is enabled for \(project)."
                             case "disable-compactions": self.status = "Codex compaction logging is disabled for \(project)."
@@ -78,7 +105,7 @@ final class CodexHooksPanelModel: ObservableObject {
                             self.status = result.message ?? "Could not update project hooks."
                         }
                     } else {
-                        self.status = errorText.isEmpty ? "Hook installer returned an invalid response." : errorText
+                        self.status = "Hook installer returned an invalid response."
                     }
                     completion?(result)
                 }
@@ -184,6 +211,172 @@ struct CodexHooksPanel: View {
                 "pipeline": "MainTemplateWorkGroupCard.swift:projectHooks > CodexHooks.swift:CodexHooksPanelModel.run > hooks/install_project_hooks.py"
             ])
         }
+    }
+}
+
+@MainActor
+struct AgentWorkflowActionsModal: View {
+    let groupID: UUID
+    @ObservedObject var model: CodexHooksPanelModel
+    let directory: String
+    let groupName: String
+    let palette: GridlineTemplate.Palette
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var isGuideReady = false
+    @State private var workflowTerminal: TerminalSession?
+    @State private var workflowTask: Task<Void, Never>?
+    @State private var selectedAction: String?
+
+    var body: some View {
+        MainTemplateDropdownPanel(title: selectedAction?.uppercased() ?? "AI WORKFLOW", palette: palette, width: workflowTerminal == nil ? 410 : 680) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(model.projectPath ?? directory)
+                    .font(.system(size: 10, design: .monospaced))
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+
+                if model.isBusy { ProgressView().controlSize(.small) }
+                if model.docsFolderConflict {
+                    Label("Error: an existing doc folder was found.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.orange)
+                        .accessibilityIdentifier("gridline.group.aiWorkflow.docsError.\(groupID.uuidString)")
+                }
+                if model.agentInstructionsFileExists {
+                    Text("Existing \(model.agentInstructionsFileName) found. Create will read and preserve its rules, then add the required feature workflow and keyword links.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("gridline.group.aiWorkflow.instructionsFound.\(groupID.uuidString)")
+                }
+                if !model.status.isEmpty {
+                    Text(model.status)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                if let workflowTerminal {
+                    Text("One-time Codex terminal · \(workflowTerminal.launchDirectory)")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                    TerminalPane(session: workflowTerminal)
+                        .frame(height: 390)
+                        .background(palette.terminalCanvas)
+                        .accessibilityIdentifier("gridline.group.aiWorkflow.terminal.\(groupID.uuidString)")
+                    HStack {
+                        Text("The proposal must ask before editing. Closing this modal ends the temporary session.")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Close terminal") { dismiss() }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("gridline.group.aiWorkflow.closeTerminal.\(groupID.uuidString)")
+                    }
+                } else {
+                    MainTemplateDropdownActionRow(
+                        title: "Create AI workflow",
+                        subtitle: "Paste the complete create guide into a temporary Codex terminal",
+                        systemImage: "doc.badge.plus",
+                        tint: palette.accent,
+                        identifier: "gridline.group.aiWorkflow.create.\(groupID.uuidString)",
+                        isDisabled: model.isBusy || !isGuideReady || model.docsFolderConflict
+                    ) {
+                        startWorkflow(fixing: false)
+                    }
+
+                    MainTemplateDropdownActionRow(
+                        title: "Fix AI workflow",
+                        subtitle: "Paste the complete fix guide into a temporary Codex terminal",
+                        systemImage: "wrench.and.screwdriver",
+                        tint: palette.accent,
+                        identifier: "gridline.group.aiWorkflow.fix.\(groupID.uuidString)",
+                        isDisabled: model.isBusy || !isGuideReady
+                    ) {
+                        startWorkflow(fixing: true)
+                    }
+
+                    Text("Each action opens a temporary Codex terminal at this project's root. It proposes changes and waits for your approval before editing.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("The selected guide's full contents are pasted into the terminal. No guide file is created in the project's .codex folder.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .onAppear {
+            model.run(action: "install-ai-workflow", directory: directory) { result in
+                isGuideReady = result?.aiWorkflowGuidesAvailable == true
+            }
+        }
+        .onDisappear(perform: stopWorkflowTerminal)
+    }
+
+    private func startWorkflow(fixing: Bool) {
+        guard workflowTerminal == nil else { return }
+        let project = model.projectPath ?? directory
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: project, isDirectory: &isDirectory), isDirectory.boolValue else {
+            model.status = "The project root is not an available directory."
+            return
+        }
+
+        let guideName = fixing ? "fix_ai_workflow.md" : "agent_workflow.md"
+        guard let guideURL = Bundle.main.resourceURL?
+            .appendingPathComponent("hooks", isDirectory: true)
+            .appendingPathComponent(guideName),
+              FileManager.default.isReadableFile(atPath: guideURL.path),
+              let guide = try? String(contentsOf: guideURL, encoding: .utf8),
+              !guide.isEmpty else {
+            model.status = "The bundled AI workflow guide is unavailable."
+            return
+        }
+        selectedAction = fixing ? "Fix AI workflow" : "Create AI workflow"
+        let session = TerminalSession(
+            saved: SavedSession(
+                id: UUID(),
+                groupID: groupID,
+                kind: .codex,
+                label: "AI workflow",
+                followsTerminalTitle: false,
+                workingDirectory: project
+            ),
+            directory: project,
+            groupName: groupName
+        )
+        workflowTerminal = session
+        let prompt = "Project root and terminal working directory: `\(project)`. Follow the complete selected Gridline guide included below. Treat its instructions as the task; do not look for a project copy.\n\n--- BEGIN \(guideName) ---\n\n\(guide)\n\n--- END \(guideName) ---"
+        DebugEvents.recordDiagnostic("provider.aiWorkflowTerminalStarted", element: "gridline.group.aiWorkflow.terminal.\(groupID.uuidString)", details: [
+            "action": fixing ? "fix" : "create",
+            "groupID": groupID.uuidString,
+            "terminalSession": session.id.uuidString
+        ])
+        workflowTask?.cancel()
+        workflowTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard !Task.isCancelled, session.isRunning else { return }
+            session.terminal.stageText(prompt)
+            DebugEvents.recordDiagnostic("provider.aiWorkflowPromptStaged", element: "gridline.group.aiWorkflow.\(groupID.uuidString)", details: [
+                "action": fixing ? "fix" : "create",
+                "groupID": groupID.uuidString,
+                "terminalSession": session.id.uuidString
+            ])
+            session.terminal.window?.makeFirstResponder(session.terminal)
+        }
+    }
+
+    private func stopWorkflowTerminal() {
+        workflowTask?.cancel()
+        workflowTask = nil
+        workflowTerminal?.terminal.terminate()
+        workflowTerminal = nil
     }
 }
 

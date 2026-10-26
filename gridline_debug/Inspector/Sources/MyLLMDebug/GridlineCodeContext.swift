@@ -27,8 +27,17 @@ enum GridlineCodeContext {
             return "gridline/Sources/Gridline/GridlineApp.swift → macOS Gridline app menu → WorkspaceStore.expandAllWorkgroups() / collapseAllWorkgroups(); per-workgroup collapsed state persists in workspace.json."
         case "gridline.workspace.utilityMenu":
             return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.topBar → shared palette-aware workspace dropdown, including the global Ponytail vendor updater; panel and action-row styling are in gridline/template/main_template/MainTemplateDropdownPanel.swift."
+        case "gridline.workspace.broadcastPrompt", "gridline.workspace.broadcastPrompt.modal",
+             "gridline.workspace.broadcastPrompt.close", "gridline.workspace.broadcastPrompt.shellPath",
+             "gridline.workspace.broadcastPrompt.directory", "gridline.workspace.broadcastPrompt.message",
+             "gridline.workspace.broadcastPrompt.send", "gridline.workspace.broadcastPrompt.status":
+            return "gridline/Sources/Gridline/Workspace.swift → WorkspaceView.topBar prompt button → draggable BroadcastPromptModalView; sends text plus Enter only to active Codex or Claude terminals whose current directory matches the selected path."
+        case "gridline.workspace.broadcastPrompt.restartGridline", "gridline.workspace.restartGridline":
+            return "gridline/Sources/Gridline/Workspace.swift → BroadcastPromptModalView restart control → WorkspaceView.restartGridline(), which closes and reopens Gridline."
         case let id where id.hasPrefix("gridline.workspace.ponytailSource"):
             return "gridline/Sources/Gridline/Workspace.swift → Workspace controls → Ponytail source sheet in gridline/Sources/Gridline/CodexHooks.swift → gridline/hooks/update_ponytail_vendor.py; project-specific installation remains in each work group's Project hooks menu."
+        case let id where id.hasPrefix("gridline.group.aiWorkflow"):
+            return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → work-group ellipsis → AI workflow modal in gridline/Sources/Gridline/CodexHooks.swift → gridline/hooks/install_project_hooks.py checks bundled guide availability, root AGENTS.md/agents.md length, and docs conflicts without writing to project .codex; Create/Fix launches a temporary Codex terminal at the resolved project root and terminates it when the modal closes."
         case let id where id.hasPrefix("gridline.group.hooks."):
             return "gridline/template/main_template/MainTemplateWorkGroupCard.swift → work-group ellipsis → Project hooks for this group; installer UI/state is in gridline/Sources/Gridline/CodexHooks.swift, project config merging is in gridline/hooks/install_project_hooks.py, and installed Codex runtime hooks are in gridline/hooks/."
         case let id where id.hasPrefix("gridline.group.ponytailInstalled."):
@@ -117,11 +126,16 @@ enum GridlineCodeContext {
         case "gridline.session.newCodex": return "session.created; terminal.started"
         case "gridline.layout.columns": return "layout.columnsChanged"
         case "gridline.workspace.utilityMenu": return "workspace.utilityMenuToggled"
+        case "gridline.workspace.broadcastPrompt.send": return "First Enter stages the persistent draft; Enter again triggers terminal.inputSubmitted for each still-active matching terminal."
+        case "gridline.workspace.broadcastPrompt.restartGridline", "gridline.workspace.restartGridline": return "No persistent event; restarting Gridline clears the current run's debug logs."
         case let id where id.hasPrefix("gridline.workspace.ponytailSource.done"): return "No direct action event expected; closes the vendor panel."
         case let id where id.hasPrefix("gridline.workspace.ponytailSource.paths"): return "No direct action event expected; these are the shared vendor and isolated Git pull checkout paths."
         case let id where id.hasPrefix("gridline.workspace.ponytailSource"): return "provider.ponytailVendorUpdated"
         case "gridline.workspace.directoryCommand", "gridline.workspace.defaultDirectory": return "workspace.defaultDirectoryChanged; workspace.directoryPrinted; workspace.directoryListed; workspace.directorySelected"
         case let id where id.hasPrefix("gridline.group.addSession."): return "workgroup.actionsMenuToggled; provider.hooksPanelOpened; provider.hooksConfigured"
+        case let id where id.hasPrefix("gridline.group.aiWorkflow.create.") || id.hasPrefix("gridline.group.aiWorkflow.fix."): return "provider.aiWorkflowTerminalStarted; provider.aiWorkflowPromptStaged; terminal.inputSubmitted after the user approves in the temporary Codex terminal"
+        case let id where id.hasPrefix("gridline.group.aiWorkflow.terminal."): return "provider.aiWorkflowTerminalStarted; provider.aiWorkflowPromptStaged; terminal.inputSubmitted after the user approves in the temporary Codex terminal"
+        case let id where id.hasPrefix("gridline.group.aiWorkflow."): return "provider.aiWorkflowOpened; provider.aiWorkflowPromptStaged; terminal.inputSubmitted after the user presses Enter in the Codex terminal"
         case let id where id.hasPrefix("gridline.group.ponytailInstalled."): return "provider.ponytailDocumentOpened; provider.ponytailDocumentSaved"
         case let id where id.hasPrefix("gridline.group.rustSkillFile."): return "provider.rustSkillDocumentOpened; provider.rustSkillDocumentSaved"
         case let id where id.hasPrefix("gridline.group.systemDesignDocument."): return "provider.systemDesignDocumentOpened; provider.systemDesignDocumentSaved"
@@ -192,6 +206,11 @@ enum GridlineCodeContext {
         case "gridline.layout.columns": return "Change the workspace grid column count."
         case "gridline.workspace.title": return "Open Workspace controls to change the default starting folder or access workspace actions."
         case "gridline.workspace.utilityMenu": return "Open compact workspace actions, including Ponytail source management, workgroup navigation, directory commands, skill scripts, and grid layout."
+        case "gridline.workspace.broadcastPrompt", "gridline.workspace.broadcastPrompt.modal": return "Draggable prompt broadcaster. Choose a folder and type a persistent draft. First Enter places it in matching active Codex or Claude terminals; Enter again submits it."
+        case "gridline.workspace.broadcastPrompt.directory": return "Choose the exact working folder used to match active Codex and Claude terminal sessions."
+        case "gridline.workspace.broadcastPrompt.message": return "Persistent draft staged in each matching terminal on first Enter; the second Enter submits it."
+        case "gridline.workspace.broadcastPrompt.send": return "First Enter types the draft into matching active terminals; the next Enter submits it."
+        case "gridline.workspace.broadcastPrompt.restartGridline", "gridline.workspace.restartGridline": return "Close and reopen Gridline. Its active terminal sessions will end."
         case let id where id.hasPrefix("gridline.workspace.ponytailSource.update"): return "Confirm and pull upstream Ponytail changes into Gridline's shared vendor checkout."
         case let id where id.hasPrefix("gridline.workspace.ponytailSource.status"): return "Current vendored Ponytail version or the result of an upstream update."
         case let id where id.hasPrefix("gridline.workspace.ponytailSource.paths"): return "Paths to Gridline's vendored Ponytail source and its isolated git pull checkout."
@@ -199,6 +218,14 @@ enum GridlineCodeContext {
         case "gridline.workspace.ponytailSource": return "Open shared Ponytail vendor management."
         case let id where id.hasPrefix("gridline.group.hooks.ponytail."): return "Install or refresh Ponytail for this work group's project under its .codex folder."
         case let id where id.hasPrefix("gridline.group.hooks.compactions."): return "Enable or disable safe manual/automatic Codex compaction events for this work group's project."
+        case let id where id.hasPrefix("gridline.group.aiWorkflow.create."): return "Open a one-time Codex terminal at the project root; it reads the workflow guide, proposes Markdown changes, and waits for explicit approval."
+        case let id where id.hasPrefix("gridline.group.aiWorkflow.fix."): return "Open a one-time Codex terminal at the project root; it audits and proposes repairs, then waits for explicit approval."
+        case let id where id.hasPrefix("gridline.group.aiWorkflow.docsError."): return "An unmanaged root doc/docs folder exists; the modal reports this conflict and disables Create while leaving Fix available."
+        case let id where id.hasPrefix("gridline.group.aiWorkflow.instructionsError."): return "The root AGENTS.md/agents.md exceeds 30 lines; the modal reports its line count and directs the user to Fix AI workflow."
+        case let id where id.hasPrefix("gridline.group.aiWorkflow.instructionsFound."): return "The root agent instructions are under 30 lines; Create is directed to read and preserve existing rules and link detailed guidance from the keyword table."
+        case let id where id.hasPrefix("gridline.group.aiWorkflow.closeTerminal."): return "Close the workflow modal and terminate its temporary Codex terminal; the terminal is not saved to the workspace."
+        case let id where id.hasPrefix("gridline.group.aiWorkflow.terminal."): return "Temporary Codex terminal running at the resolved project root; it closes with the workflow modal and is not persisted."
+        case let id where id.hasPrefix("gridline.group.aiWorkflow."): return "Open the AI workflow setup modal for this work group."
         case let id where id.hasPrefix("gridline.group.hooks.directory."): return "Current project folder for this work group; hook setup resolves its containing Git root."
         case let id where id.hasPrefix("gridline.group.hooks.status."): return "Codex project hook installation status for this work group."
         case let id where id.hasPrefix("gridline.group.hooks.back."): return "Return to this work group's actions."

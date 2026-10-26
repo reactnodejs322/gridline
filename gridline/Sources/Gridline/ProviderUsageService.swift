@@ -254,6 +254,7 @@ private struct ClaudeCostEstimate: Decodable {
 @MainActor
 final class ProviderUsageStatus: ObservableObject {
     @Published private(set) var snapshot = ProviderUsageSnapshot.checking
+    @Published private(set) var activeProviders: [UUID: String] = [:]
     private var terminals: [TerminalProcessReference] = []
     private var processTimer: Timer?
     private var costTimer: Timer?
@@ -283,13 +284,14 @@ final class ProviderUsageStatus: ObservableObject {
     private func refreshProcessStatus() {
         let references = terminals
         DispatchQueue.global(qos: .utility).async {
-            let counts = Self.detectProviders(for: references)
+            let providers = Self.detectProviders(for: references)
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                self.activeProviders = providers
                 self.snapshot = ProviderUsageSnapshot(
-                    codexActiveTerminals: counts["codex", default: 0],
-                    claudeActiveTerminals: counts["claude", default: 0],
-                    otherActiveTerminals: counts.filter { !["codex", "claude"].contains($0.key) }.values.reduce(0, +),
+                    codexActiveTerminals: providers.values.filter { $0 == "codex" }.count,
+                    claudeActiveTerminals: providers.values.filter { $0 == "claude" }.count,
+                    otherActiveTerminals: providers.values.filter { $0 != "codex" && $0 != "claude" }.count,
                     claudeAPIEquivalentUSD: self.snapshot.claudeAPIEquivalentUSD,
                     claudeUnpricedModels: self.snapshot.claudeUnpricedModels
                 )
@@ -351,7 +353,7 @@ final class ProviderUsageStatus: ObservableObject {
         }
     }
 
-    nonisolated private static func detectProviders(for references: [TerminalProcessReference]) -> [String: Int] {
+    nonisolated private static func detectProviders(for references: [TerminalProcessReference]) -> [UUID: String] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
         process.arguments = ["-Ao", "pid=", "-o", "ppid=", "-o", "comm="]
@@ -396,7 +398,7 @@ final class ProviderUsageStatus: ObservableObject {
                 "copilot": ["copilot", "gh-copilot"],
                 "ollama": ["ollama"]
             ]
-            var counts: [String: Int] = [:]
+            var providersByTerminal: [UUID: String] = [:]
             for reference in references where reference.shellPID > 0 {
                 let descendants = Set(parentByPID.compactMap { pid, parent in
                     var ancestor = parent
@@ -409,10 +411,10 @@ final class ProviderUsageStatus: ObservableObject {
                 })
                 let names = descendants.compactMap { nameByPID[$0] }
                 if let provider = providerNames.first(where: { _, namesForProvider in names.contains(where: namesForProvider.contains) })?.key {
-                    counts[provider, default: 0] += 1
+                    providersByTerminal[reference.id] = provider
                 }
             }
-            return counts
+            return providersByTerminal
         } catch {
             return [:]
         }

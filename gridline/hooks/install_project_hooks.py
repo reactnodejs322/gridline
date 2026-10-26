@@ -178,13 +178,37 @@ def install(args: argparse.Namespace) -> dict[str, Any]:
             project = Path(git_root).resolve(strict=True)
     except (OSError, subprocess.SubprocessError):
         pass
+    resource = Path(args.resource_root).resolve(strict=True)
+    if args.action == "install-ai-workflow":
+        guides = (resource / "agent_workflow.md", resource / "fix_ai_workflow.md")
+        docs = project / "docs"
+        doc = project / "doc"
+        managed_marker = project / ".codex" / ".gridline-agent-workflow-docs"
+        if any(not source.is_file() for source in guides):
+            raise InstallError("A bundled AI workflow guide is missing.")
+
+        instruction_file = next((path for path in (project / "AGENTS.md", project / "agents.md") if path.exists()), None)
+        if instruction_file is not None and not instruction_file.is_file():
+            raise InstallError("The root AGENTS.md path is not a file; no files were changed.")
+        instruction_file_name = instruction_file.name if instruction_file else "AGENTS.md"
+
+        docs_conflict = doc.exists() or (docs.exists() and not managed_marker.is_file())
+        return {
+            "ok": not docs_conflict,
+            "projectPath": str(project),
+            "aiWorkflowGuidesAvailable": True,
+            "agentInstructionsFileExists": instruction_file is not None,
+            "agentInstructionsFileName": instruction_file_name,
+            "docsFolderConflict": docs_conflict,
+            "message": "Error: an existing doc folder was found." if docs_conflict else "AI workflow guides are available in Gridline.",
+        }
+
     codex_dir = project / ".codex"
     hooks_dir = codex_dir / "hooks"
     managed_dir = hooks_dir / "gridline"
     config_path = codex_dir / "hooks.json"
     config = read_config(config_path)
     hooks = config["hooks"]
-    resource = Path(args.resource_root).resolve(strict=True)
 
     if args.action == "inspect":
         return {
@@ -238,7 +262,7 @@ def install(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("inspect", "install-ponytail", "enable-compactions", "disable-compactions", "install-all"))
+    parser.add_argument("action", choices=("inspect", "install-ponytail", "enable-compactions", "disable-compactions", "install-all", "install-ai-workflow"))
     parser.add_argument("--project-root", required=True)
     parser.add_argument("--resource-root", required=True)
     args = parser.parse_args()

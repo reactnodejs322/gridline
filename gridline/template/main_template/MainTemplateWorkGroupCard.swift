@@ -67,9 +67,11 @@ struct MainTemplateWorkGroupCard: View {
     let terminalUsage: [UUID: TerminalUsageSnapshot]
     let terminalUsageUpdatesEnabled: Bool
     @StateObject private var ponytailStatus = CodexHooksPanelModel()
+    @StateObject private var aiWorkflowModel = CodexHooksPanelModel()
     @State private var visibleProjectDocuments: Set<ProjectMarkdownDocument> = []
     @State private var showingActionsDropdown = false
     @State private var showingProjectHooks = false
+    @State private var showingAIWorkflow = false
     @State private var showingProjectDocument: ProjectMarkdownDocument?
     @State private var showingUsageSession: UUID?
 
@@ -215,6 +217,15 @@ struct MainTemplateWorkGroupCard: View {
             .buttonStyle(.plain)
             .help("Work group and terminal actions")
             .accessibilityIdentifier("gridline.group.addSession.\(group.id.uuidString)")
+            .sheet(isPresented: $showingAIWorkflow) {
+                AgentWorkflowActionsModal(
+                    groupID: group.id,
+                    model: aiWorkflowModel,
+                    directory: projectDirectory,
+                    groupName: group.name,
+                    palette: palette
+                )
+            }
             .popover(isPresented: $showingActionsDropdown, arrowEdge: .bottom) {
                 MainTemplateDropdownPanel(
                     title: showingProjectHooks ? "PROJECT HOOKS" : "WORK GROUP ACTIONS",
@@ -239,6 +250,22 @@ struct MainTemplateWorkGroupCard: View {
                             showingProjectHooks = false
                         }
                     } else {
+                        MainTemplateDropdownActionRow(
+                            title: "AI workflow…",
+                            subtitle: "Install the guide, then create or fix this project's workflow",
+                            systemImage: "doc.text.magnifyingglass",
+                            tint: palette.accent,
+                            identifier: "gridline.group.aiWorkflow.\(group.id.uuidString)",
+                            isDisabled: aiWorkflowModel.isBusy
+                        ) {
+                            showingActionsDropdown = false
+                            DispatchQueue.main.async { showingAIWorkflow = true }
+                            DebugEvents.recordDiagnostic("provider.aiWorkflowOpened", element: "gridline.group.aiWorkflow.\(group.id.uuidString)", details: [
+                                "groupID": group.id.uuidString,
+                                "groupName": group.name
+                            ])
+                        }
+
                         MainTemplateDropdownActionRow(
                             title: "Choose project folder…",
                             subtitle: "Set this work group’s folder",
