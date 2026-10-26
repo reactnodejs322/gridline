@@ -18,6 +18,34 @@ The keyword table must link each distinct feature or skill to its own Markdown d
 
 **Preserve the existing linked chapter map exactly.** Do not rewrite, replace, reorder, shorten, or convert its chapter rows, section links, labels, or descriptions into keyword entries. The chapter map and the human-keyword table are separate navigation aids. Add a separate `## Keyword table of contents` with useful human terms, personal/project-specific wording, abbreviations, and aliases linked to the matching feature documents. Update the chapter map only if a chapter or its destination actually changes.
 
+**Update keyword aliases only after user acceptance.** Add new human terms and aliases to the root keyword table only after the user confirms they are satisfied or says the task is complete. If the user is not satisfied, hold back those new aliases. Preserve existing useful aliases when updating a row. Put explanations, commands, troubleshooting, and implementation details in the linked feature guide, not in extra prose beside the table.
+
+Use this row format:
+
+```md
+| [human phrase, alternate wording, project term](docs/actual_feature_name.md) | Human feature name |
+```
+
+For example, “the device keeps disconnecting” and “keep it alive” are aliases for an existing device-connection guide:
+
+```md
+| [device connection, tablet connection, USB debugging, wireless ADB, keeps disconnecting, keep it alive](docs/device_connection.md) | Device connection and recovery |
+```
+
+This example only demonstrates human-word aliases; use the target repository's real feature names and guide paths.
+
+### GUARDRAIL Required format for agents.md updates
+
+When asked to document something in `AGENTS.md`, remember wording, or add a feature, symptom, phrase, or lookup, update the **Keyword table of contents** after the user confirms satisfaction or completion. Until then, hold back new keyword aliases.
+
+- Add useful human terms and aliases to the first column of the closest existing row.
+- Create a new row only when the information belongs in a separate feature guide.
+- Put feature explanations, commands, troubleshooting, and implementation details in the linked guide.
+- Do not replace the keyword-table update with a paragraph, note, or special-case instruction.
+- Do not add feature-specific prose outside the table unless the user explicitly asks for that format.
+
+Before finishing a documentation change, inspect the diff and confirm the accepted request terms appear in the keyword table, the feature details live in the linked guide, and changed links resolve. A prose-only addition does not satisfy a request to update the table.
+
 **Adapt the workflow to this repository.** Treat its complete existing `AGENTS.md`/`agents.md` as the source for project-specific architecture, safety constraints, terminology, commands, and documentation conventions. Preserve those rules and apply them when organizing the docs; do not replace them with generic examples or assume another project's layout. Add the requested feature lookup workflow alongside the repository's rules. Reuse and enrich an existing feature keyword table if it already serves that purpose; if its table is a chapter map or another linked navigation map, keep that map intact and add a distinct keyword table. Map the user's own project terms and aliases to the project's actual feature documents and verified code paths. Preserve any explicit root-file size limit already in the project instructions; do not invent one, and verify that the proposed result fits.
 
 **Keep target-project content isolated.** Only retain or add instructions, app names, paths, commands, indexes, and components that belong to the target repository and are verified there. Never copy names or maintenance instructions from the tool or source repository supplying this setup prompt. If an existing target file contains such a cross-project reference, identify it as inaccurate in the proposal and ask approval before removing it. After approved edits, check that every remaining named app, path, and index belongs to the target repository.
@@ -57,7 +85,7 @@ Continue only after the user explicitly approves the proposal.
 - Make only the approved Markdown changes. Do not edit source code, tests, scripts, configuration, or human-authored notes.
 - Keep the repository's existing project-specific architecture, safety, command, terminology, and navigation rules. Add the requested workflow around them; do not replace them with generic guidance.
 - Preserve the existing linked chapter map exactly. Keep it separate from the keyword table; edit it only when an approved chapter or destination change requires it.
-- Put the required workflow rule at the top of the root instruction file, before the keyword table. Include the user's exact and project-specific terms as aliases on the corresponding feature row.
+- Put the required workflow rule at the top of the root instruction file, before the keyword table. Include the user's exact and project-specific terms as aliases on the corresponding feature row only after they confirm satisfaction or completion; if not satisfied, hold those new aliases back.
 - In each feature document, put `## Where this lives in code` directly after the title. Add only code paths that you inspected and verified. Use links relative to that Markdown document.
 - Put a `## Checkpoint` at the bottom to record what is documented or verified and what remains uncertain.
 - Preserve important constraints. Move their explanations into docs and keep a short root link or instruction when agents need to find them.

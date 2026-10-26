@@ -13,7 +13,7 @@
 
 The work-group **AI workflow…** action opens a disposable Codex terminal at the resolved project root and stages the complete selected guide. Closing the modal terminates that terminal; it is not saved in `workspace.json`. The guide is bundled with Gridline and is not copied into the project's `.codex/` directory.
 
-Both guides require a proposal and explicit user approval before project Markdown edits. They preserve project-specific rules and the existing linked chapter map, then route human wording through a separate keyword table to focused Markdown guides and verified code paths.
+Both guides require a proposal and explicit user approval before project Markdown edits. They preserve project-specific rules and the existing linked chapter map, then route human wording through a separate keyword table to focused Markdown guides and verified code paths. New keyword aliases are added only after the user confirms satisfaction or completion; otherwise they are held back.
 
 The installer checks whether the bundled guides are available and reports project conflicts. A root `doc/` directory, or an unmanaged `docs/` directory without the workflow marker, disables the Create action. This repository now uses `docs/` for feature documents; the Create action will report that conflict for this repository until the installer policy or managed marker changes. Fix remains available.
 

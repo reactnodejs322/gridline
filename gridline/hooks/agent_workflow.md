@@ -12,6 +12,36 @@ Near the top of the repository's root `AGENTS.md` (or `agents.md`), before the k
 >
 > Do not automatically move human-authored notes into feature guides. If a changed or untracked note in `docs/` seems relevant, ask before incorporating it and leave it unchanged unless asked.
 
+## Keyword table update gate
+
+Update the root keyword table with new human terms and aliases only after the user confirms they are satisfied or says the task is complete. If the user is not satisfied, hold back those new aliases. Preserve existing useful aliases when updating a row. Put feature explanations, commands, troubleshooting, and implementation details in the linked feature guide; do not replace a keyword-table update with prose.
+
+Use this row format:
+
+```md
+| [human phrase, alternate wording, project term](docs/actual_feature_name.md) | Human feature name |
+```
+
+For example, “the device keeps disconnecting” and “keep it alive” are aliases for an existing device-connection guide:
+
+```md
+| [device connection, tablet connection, USB debugging, wireless ADB, keeps disconnecting, keep it alive](docs/device_connection.md) | Device connection and recovery |
+```
+
+This example only demonstrates human-word aliases; use the target repository's real feature names and guide paths.
+
+### GUARDRAIL Required format for agents.md updates
+
+When asked to document something in `AGENTS.md`, remember wording, or add a feature, symptom, phrase, or lookup, update the **Keyword table of contents** after the user confirms satisfaction or completion. Until then, hold back new keyword aliases.
+
+- Add useful human terms and aliases to the first column of the closest existing row.
+- Create a new row only when the information belongs in a separate feature guide.
+- Put feature explanations, commands, troubleshooting, and implementation details in the linked guide.
+- Do not replace the keyword-table update with a paragraph, note, or special-case instruction.
+- Do not add feature-specific prose outside the table unless the user explicitly asks for that format.
+
+Before finishing a documentation change, inspect the diff and confirm the accepted request terms appear in the keyword table, the feature details live in the linked guide, and changed links resolve. A prose-only addition does not satisfy a request to update the table.
+
 Preserve the target repository's existing instructions and any explicit root-file size limit. The keyword table must link each distinct feature or skill to its own document in the target project's docs location. Keep those documents flat except for the designated human-written-docs folder. Do not replace a project's existing required workflow; integrate it into the contract without duplicating it.
 
 ## Adapt to the active repository
@@ -54,7 +84,7 @@ The keyword table is a short navigation aid. The feature document explains behav
 
 - Put focused feature and skill documents directly in the repository's existing `docs/` folder. Keep it flat except for the designated human-written-docs subfolder; do not create topic subfolders or move human-authored notes without approval. Each feature document must list verified implementation paths in `## Where this lives in code` immediately after its title.
 - Give the keyword table useful aliases that match how a person asks about each feature. Link each row to its real document path, such as `docs/feature_name.md`; never copy example paths that do not exist in this repository.
-- Treat the user's exact wording, personal feature names, project-specific vocabulary, abbreviations, and shorthand as first-class aliases. Match them by meaning to the verified feature document, then preserve new user-provided terms in that document's existing keyword row; do not make duplicate documents for synonyms.
+- Treat the user's exact wording, personal feature names, project-specific vocabulary, abbreviations, and shorthand as first-class aliases. Match them by meaning to the verified feature document, then preserve new user-provided terms in that document's existing keyword row only after the user confirms satisfaction or completion; otherwise hold them back. Do not make duplicate documents for synonyms.
 - Start each feature document with its title, then `## Where this lives in code` and verified relative source paths. Follow with behavior and a short `## Checkpoint` describing what was verified and what remains uncertain.
 - Keep keyword rows focused on human terms and aliases; put implementation paths in the linked feature documents.
 
@@ -75,7 +105,7 @@ This is a setup prompt, not a project feature guide. Do not copy it into the pro
 7. **Verify with evidence.** Use relevant checks or observable behavior. A retry should respond to a specific new finding, such as an error, failed check, stale link, or user correction. Do not repeat unguided self-review.
 8. **Review the resulting changes.** Run `git status --short` again and inspect the relevant diffs. Include new untracked files, which may not appear in a regular diff. Separate this task's changes from the starting state.
 9. **Update documentation in the same task.** Update every affected feature document with the current implementation, test, and configuration paths. Remove links to files that moved or were deleted.
-10. **Update navigation.** If the feature is new or its useful human terms changed, add or adjust a keyword-table row linking to its feature document.
+10. **Update navigation after acceptance.** Once the user confirms they are satisfied or says the task is complete, add or adjust the keyword-table row with useful human terms and aliases learned from the request. If the user is not satisfied, hold back those new terms. Link the row to its feature document.
 11. **Report accurately.** Say what changed and what evidence was checked. State anything that remains uncertain; do not claim a check was run when it was not.
 
 ## Feature document format

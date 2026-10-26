@@ -1,27 +1,87 @@
 ## Agent workflow contract
 
-For each feature, use this chain: **human words → keyword table → feature document → verified code paths**. This file is the short LLM entry point; general agent guidance and feature details for this project live in `./docs/`.
+For each feature, use this chain: **human words → keyword table → feature document → verified code paths**. This file is the short LLM entry point; general agent guidance and feature details live in `./docs/`.
 
-Match the user's ordinary wording, personal terms, project vocabulary, abbreviations, and synonyms to the closest keyword row. If several rows match, start with the narrowest guide for the requested behavior. Read the full linked guide before inspecting code, then verify its code paths against the source.
+^ update the keyword table when a human word is completed or the human is satisfied.. IF THE HUMAN IS SATISFIED UPDATE IT IF NOT  HOLD BACK
 
-Before editing, record `git status --short`. After implementation and relevant checks, compare status and inspect the task diff, including new files. Update the feature guide's **Where this lives in code** section with verified paths. For a new feature guide, put that section immediately after its title, document confirmed behavior, and add a **Checkpoint**. Add or update the keyword row with useful human terms and aliases learned from the request.
+### Find the relevant guide
+
+Match the user's ordinary wording, personal terms, project vocabulary, abbreviations, and synonyms to the closest keyword row. If several rows match, start with the narrowest guide for the requested behavior.
+
+Read the full linked guide before inspecting code, then verify its code paths against the source. Search more broadly only when the table and linked guide do not provide enough information.
+
+### GUARDRAIL Required format for agents.md updates
+
+When asked to “document this in agents.md,” “remember this wording,” or add a feature, symptom, phrase, or lookup, update the **Keyword table of contents**.
+
+- Add useful human terms and aliases to the first column of the closest existing row.
+- Create a new row only when the information belongs in a separate feature guide.
+- Put feature explanations, commands, troubleshooting, and implementation details in the linked guide.
+- Do not substitute a paragraph, note, or special-case instruction for a keyword-table update.
+- Do not add feature-specific paragraphs outside the table unless the user explicitly requests that format.
+- Keep general workflow rules in this contract.
+
+Use this row format:
+
+```md
+| [human phrase, alternate wording, project term](docs/actual_feature_name.md) | Human feature name |
+```
+
+For example, “the Inspector keeps disconnecting” and “keeping it alive” belong as aliases in the existing connection row:
+
+```md
+| [{human words}  {human word} {everything here is a human word sample}Android device connection, tablet connection, ADB, USB debugging, wireless ADB, keeps disconnecting, keeping it alive, keep alive](docs/android_device_connection.md) | Android tablet connection, ADB setup, and keep-alive recovery |
+```
+
+Preserve existing useful aliases when updating a row. The examples above illustrate the format; the actual entries belong in the keyword table.
+
+Before finishing, inspect the diff and confirm that the requested terms were added inside the keyword table. A prose-only addition does not satisfy this request.
+
+### Implement and verify
+
+Before editing, record `git status --short`.
+
+After implementation and relevant checks, compare status and inspect the task diff, including new files. Distinguish existing changes from this task's changes.
+
+Update the owning feature guide's **Where this lives in code** section when the task adds, changes, moves, or removes relevant implementation, test, or configuration paths. Include only verified paths relevant to that feature.
+
+For a new feature guide:
+
+- Use a descriptive filename under `docs/`.
+- Put **Where this lives in code** immediately after the title.
+- Document confirmed behavior and add a **Checkpoint** stating what was verified and what remains unverified.
+- Add a keyword-table row linking to the guide.
+
+Before finishing a documentation change, verify that:
+
+- Requested search terms appear inside the keyword table.
+- Feature-specific details live in the linked guide.
+- Links resolve and code paths have been verified.
+- No redundant feature-specific paragraph was added to this entry point.
+
+### Preserve human-authored notes
 
 Do not automatically move human-authored notes into feature guides. If a changed or untracked note in `docs/` seems relevant, ask before incorporating it and leave it unchanged unless asked.
 
-<!-- Each Markdown file in docs/ is a feature guide. The filename below is a generic example; use the actual feature name in the project. -->
-Feature guide path: `docs/feature.md`
+### Feature guide template
 
-The path above is where the file is saved. The file contents start here:
+Save the guide as `docs/actual_feature_name.md`. Replace the placeholders below; include only relevant paths that exist and have been verified. Links are relative to the guide.
 
+```md
 # {Feature name}
 
 ## Where this lives in code
 
-- [`{verified source path}`](../{verified source path})
-- [`{verified test or configuration path}`](../{verified test or configuration path})
+- [Implementation](../{verified source path})
+- [Tests or configuration](../{verified test or configuration path})
 
-Replace each placeholder with a path that exists and has been verified. Use links relative to the feature guide and include only paths relevant to that feature.
+## Behavior
 
+{Confirmed behavior and relevant operating instructions.}
+
+## Checkpoint
+
+{Evidence checked, verification results, and anything still unverified.}
 
 Before changing code, read [Project rules and copy selection](docs/project-rules.md) for the target app copy, privacy, Accessibility IDs, model storage, and implementation boundaries. Read the [Gridline Debug index](gridline_debug/INDEX.md) before changing app behavior.
 
@@ -29,7 +89,7 @@ Before changing code, read [Project rules and copy selection](docs/project-rules
 
 Use the terms as people say them, including shorthand and aliases. Read the full linked document, then inspect its code paths. If a request spans features, read each matching document.
 
-| Human terms and aliases | Feature document |
+| Keyword table of contents | Feature document |
 | --- | --- |
 | work group, workgroup, group, project tile, current product behavior, terminal, Codex session, folder, label, rename, zoom, resize, sidebar, broadcast prompt, cd, pwd, ls, directory command | [Workspace and terminals](docs/workspace.md) |
 | skin, template, main template, template architecture, UI skins, appearance, palette, dropdown, popover, template selector | [Templates and dropdowns](docs/templates.md) |
