@@ -98,7 +98,7 @@ Use the terms as people say them, including shorthand and aliases. Read the full
 | AI workflow, agent workflow, fix AI workflow, create workflow, keyword table, human keywords, docs cleanup | [AI workflow](docs/ai-workflow.md) |
 | Gridline Debug, inspector permissions, inspector diagnostics, Accessibility, hover, selected element, current logs, full log output, timeline, report, source lookup, Input Monitoring, Python trace | [Gridline Debug](docs/gridline-debug.md) |
 | audio transcription, audio to text, Whisper, speaker labels, transcript, pause paragraphs | [Audio to text](docs/audio-to-text.md) |
-| Voice todo, voice notes, Problem Notes, wake phrase, microphone capture | [Voice todo](docs/voice-todo.md) |
+| Voice todo, voice notes, Problem Notes, wake phrase, microphone capture, detached voice-todo worker, orphaned voice-todo process, stop voice-todo worker | [Voice todo](docs/voice-todo.md) |
 | skill scripts, skill menu, local processing, model resources, model locations, model download, Whisper model, diarization model, checksum, pinned revision | [Skill scripts and model resources](docs/skills-and-models.md) |
 | start main app, build, hot reload, launch, restart, build error, shared stop, diagnostic commands, create version, debug version, stop version, version lifecycle, version copy, isolated version, Version 1 | [Build and version lifecycle](docs/build-and-versions.md) |
 | app copy, copy selection, main vs version, project layout, privacy, accessibility IDs, implementation rules | [Project rules and copy selection](docs/project-rules.md) |

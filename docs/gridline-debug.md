@@ -4,6 +4,8 @@
 
 - [inspect-logs.sh](../gridline_debug/inspect-logs.sh)
 - [InspectorStore.swift](../gridline_debug/Inspector/Sources/MyLLMDebug/InspectorStore.swift)
+- [MyLLMDebugApp.swift](../gridline_debug/Inspector/Sources/MyLLMDebug/MyLLMDebugApp.swift)
+- [InspectorView.swift](../gridline_debug/Inspector/Sources/MyLLMDebug/InspectorView.swift)
 - [DebugTimelineStore.swift](../gridline_debug/Inspector/Sources/MyLLMDebug/DebugTimelineStore.swift)
 - [DebugEvents.swift](../gridline/Sources/Gridline/DebugEvents.swift)
 

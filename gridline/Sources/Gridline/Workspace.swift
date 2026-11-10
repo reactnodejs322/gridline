@@ -4,7 +4,17 @@ import SwiftUI
 import SwiftTerm
 import UniformTypeIdentifiers
 
-enum SessionKind: String, Codable { case codex, shell }
+enum SessionKind: String, Codable {
+    case codex, claude, shell
+
+    var displayName: String {
+        switch self {
+        case .codex: "Codex"
+        case .claude: "Claude"
+        case .shell: "Shell"
+        }
+    }
+}
 
 struct SavedGroup: Codable, Identifiable {
     var id: UUID
@@ -298,7 +308,7 @@ final class TerminalSession: NSObject, ObservableObject, Identifiable, LocalProc
 
     let id: UUID
     let groupID: UUID
-    let kind: SessionKind
+    @Published private(set) var kind: SessionKind
     let terminal: GridlineTerminalView
     let launchDirectory: String
     @Published var label: String
@@ -351,11 +361,12 @@ final class TerminalSession: NSObject, ObservableObject, Identifiable, LocalProc
             currentDirectory: directory
         )
         monitorCurrentDirectory()
-        DebugEvents.record("terminal.started", element: kind == .codex ? "gridline.session.codex" : "gridline.session.shell", details: ["kind": kind.rawValue, "session": id.uuidString])
-        if kind == .codex {
+        DebugEvents.record("terminal.started", element: "gridline.session.\(kind.rawValue)", details: ["kind": kind.rawValue, "session": id.uuidString])
+        if kind == .codex || kind == .claude {
+            let command = "\(kind.rawValue)\n"
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
                 guard let self, self.isRunning else { return }
-                self.terminal.send(txt: "codex\n")
+                self.terminal.send(txt: command)
                 self.terminal.enableSubmissionCharacterCounting()
             }
         } else {
@@ -390,6 +401,19 @@ final class TerminalSession: NSObject, ObservableObject, Identifiable, LocalProc
         followsTerminalTitle = false
         DebugEvents.record("session.renamed", element: "gridline.session.label", details: ["session": id.uuidString, "label": name])
         onChange?()
+    }
+
+    func rememberProvider(_ provider: SessionKind) -> Bool {
+        guard (provider == .codex || provider == .claude), kind != provider else { return false }
+        kind = provider
+        if followsTerminalTitle { label = provider.displayName }
+        terminal.submissionContext = (
+            sessionID: id,
+            groupID: groupID,
+            groupName: groupName,
+            kind: provider.rawValue
+        )
+        return true
     }
 
     func openInVSCode() {
@@ -721,6 +745,14 @@ final class WorkspaceStore: ObservableObject {
         changed()
     }
 
+    func rememberActiveProviders(_ providers: [UUID: String]) {
+        let changedProvider = sessions.contains { session in
+            guard let provider = providers[session.id], let kind = SessionKind(rawValue: provider) else { return false }
+            return session.rememberProvider(kind)
+        }
+        if changedProvider { changed() }
+    }
+
     func toggle(_ group: SavedGroup) {
         guard let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
         groups[index].isCollapsed.toggle()
@@ -815,7 +847,7 @@ final class WorkspaceStore: ObservableObject {
     private func makeSession(group: SavedGroup, kind: SessionKind) -> TerminalSession {
         let saved = SavedSession(
             id: UUID(), groupID: group.id, kind: kind,
-            label: kind == .codex ? "Codex" : "Shell",
+            label: kind.displayName,
             followsTerminalTitle: true,
             workingDirectory: group.directory
         )
@@ -877,9 +909,8 @@ struct TerminalPane: NSViewRepresentable {
 
     @MainActor
     private func applyAccessibilityContext(to view: LocalProcessTerminalView) {
-        let kind = session.kind == .codex ? "Codex" : "shell"
         view.setAccessibilityIdentifier("gridline.session.terminal.\(session.id.uuidString)")
-        view.setAccessibilityLabel("\(session.label) \(kind) terminal")
+        view.setAccessibilityLabel("\(session.label) \(session.kind.displayName) terminal")
         view.setAccessibilityHelp("Terminal session \(session.id.uuidString), work group \(session.groupID.uuidString). Terminal text and keystrokes are not recorded by Gridline debug events.")
     }
 
@@ -1093,6 +1124,9 @@ struct WorkspaceView: View {
             providerUsage.updateTerminals(workspace.sessions)
             terminalUsage.updateTerminals(workspace.sessions)
         }
+        .onChange(of: providerUsage.activeProviders) { providers in
+            workspace.rememberActiveProviders(providers)
+        }
         .foregroundStyle(template.palette.primaryText)
         .overlay {
             if showingSkillScriptOutput {
@@ -1226,6 +1260,19 @@ struct WorkspaceView: View {
                 .padding(.leading, 6)
             Spacer()
             if Bundle.main.bundleIdentifier == "local.gridline.terminal" {
+                Button {
+                    workspace.addGroup()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 26, height: 25)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("New work group")
+                .accessibilityLabel("New work group")
+                .accessibilityIdentifier("gridline.workspace.newGroup")
+
                 Button {
                     broadcastDirectory = workspace.sessions.first(where: \.isRunning)?.currentDirectory ?? workspace.defaultDirectory
                     isBroadcastPromptExpanded = true
@@ -1451,6 +1498,7 @@ struct WorkspaceView: View {
         template.makeWorkGroupCard(GridlineWorkGroupCardContext(
             group: group,
             groupSessions: workspace.groupSessions(group),
+            activeProviders: providerUsage.activeProviders,
             template: template,
             workspace: workspace,
             editingGroup: $editingGroup,

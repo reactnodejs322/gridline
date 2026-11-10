@@ -32,6 +32,7 @@ struct GridlineTemplate: Identifiable {
 struct GridlineWorkGroupCardContext {
     let group: SavedGroup
     let groupSessions: [TerminalSession]
+    let activeProviders: [UUID: String]
     let template: GridlineTemplate
     let workspace: WorkspaceStore
     let editingGroup: Binding<UUID?>

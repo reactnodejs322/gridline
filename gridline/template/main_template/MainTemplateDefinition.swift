@@ -28,6 +28,7 @@ extension GridlineTemplate {
             AnyView(MainTemplateWorkGroupCard(
                 group: context.group,
                 groupSessions: context.groupSessions,
+                activeProviders: context.activeProviders,
                 template: context.template,
                 workspace: context.workspace,
                 editingGroup: context.editingGroup,

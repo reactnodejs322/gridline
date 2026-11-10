@@ -49,7 +49,7 @@ Each copy has its own `VERSION`, app bundle IDs, workspace data, logs, and watch
 - Source files and version-specific saved data remain in its folder.
 ## Shared stop and diagnostic commands
 
-- `./stop.sh` stops the main app pair and all numbered versions.
+- `./stop.sh` stops the main app pair, all numbered versions, and detached Voice todo workers whose parent app has already exited.
 - Each watcher writes its app PID and build diagnostics inside that copy's `gridline_debug/build/`. The main watcher runs `gridline_debug/collect_debug_logs.py`, which copies build results and semantic events into local `gridline_debug/timeline.jsonl`; Gridline appends completed Codex prompts there while Gridline Debug is open. The timeline resets on Gridline app launch; the Debug log viewer's Reset logs button requests deletion of the timeline, raw events, and saved build diagnostics. Inspect logs through the full-width lower viewer or `./gridline_debug/inspect-logs.sh`. The root `hot-reload-logs.md` remains a read-only archive. Generated logs and `user-log-view.json` are ignored by Git.
 - `gridline_versions/runtime-status.json` summarizes version app and watcher state.
 - A failed build leaves the current apps open and records errors in that copy's build folder.

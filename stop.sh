@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 typeset -a TARGETS GRIDLINE_IDS DEBUG_IDS GRIDLINE_PROCESSES DEBUG_PROCESSES WATCHER_PIDS
-typeset -a APP_PIDS TREE_PIDS
+typeset -a APP_PIDS TREE_PIDS VOICE_TODO_PIDS
 typeset PROCESS_SNAPSHOT
 TARGETS=("$ROOT")
 GRIDLINE_IDS=("local.gridline.terminal")
@@ -35,6 +35,21 @@ watcher_pid_for() {
   command="$(ps -p "$watcher_pid" -o command= 2>/dev/null || true)"
   [[ "$command" == *"$target/gridline_debug/watch-build.sh"* ]] || return 1
   print -r -- "$watcher_pid"
+}
+
+voice_todo_pids_for() {
+  local target="$1"
+  ps -ww -axo pid=,command= 2>/dev/null | awk -v target="$target/gridline/" '
+    {
+      pid = $1
+      command = $0
+      sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", command)
+      start = index(command, target)
+      if (!start) next
+      app_path = substr(command, start + length(target))
+      if (app_path ~ /^[^[:space:]]+\/Contents\/Resources\/skill_script\/voice_todo\/voice_todo\.py([[:space:]]|$)/) print pid
+    }
+  '
 }
 
 any_named_process_running() {
@@ -86,7 +101,15 @@ for target in "${TARGETS[@]}"; do
     WATCHER_PIDS+=("$watcher_pid")
     echo "  hot-reload watcher — PID $watcher_pid ($target)"
   fi
+  pids="$(voice_todo_pids_for "$target" || true)"
+  for pid in ${(f)pids}; do
+    [[ "$pid" == <-> ]] || continue
+    VOICE_TODO_PIDS+=("$pid")
+  done
 done
+if (( ${#VOICE_TODO_PIDS} > 0 )); then
+  echo "  detached voice-todo worker PID(s): ${(j:, :)VOICE_TODO_PIDS}"
+fi
 
 # Snapshot every process below each Gridline app and watcher before anything exits.
 # This includes SwiftTerm shells and commands they launched, such as Codex.
@@ -132,6 +155,22 @@ for (( index = 1; index <= ${#GRIDLINE_IDS}; index++ )); do
   if pgrep -x "${DEBUG_PROCESSES[$index]}" >/dev/null 2>&1; then
     osascript -e "tell application id \"${DEBUG_IDS[$index]}\" to quit" >/dev/null 2>&1 || true
   fi
+done
+
+# Voice-todo workers can outlive a crashed Gridline app and be reparented to PID 1.
+for pid in "${VOICE_TODO_PIDS[@]}"; do
+  kill -TERM "$pid" 2>/dev/null || true
+done
+for attempt in {1..20}; do
+  remaining=0
+  for pid in "${VOICE_TODO_PIDS[@]}"; do
+    if pid_is_running "$pid"; then remaining=1; break; fi
+  done
+  (( remaining == 0 )) && break
+  sleep 0.25
+done
+for pid in "${VOICE_TODO_PIDS[@]}"; do
+  pid_is_running "$pid" && kill -KILL "$pid" 2>/dev/null || true
 done
 
 # Normal app shutdown asks SwiftTerm to terminate each PTY shell. Signal any

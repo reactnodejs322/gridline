@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/bryan/Desktop/myllm/.codex/hooks/gridline/ponytail_context.cjs session-start",
+            "command": "node \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/gridline/ponytail_context.cjs\" session-start",
             "timeout": 10,
             "statusMessage": "Loading Ponytail project context"
           }
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/bryan/Desktop/myllm/.codex/hooks/gridline/ponytail_context.cjs prompt-submit",
+            "command": "node \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/gridline/ponytail_context.cjs\" prompt-submit",
             "timeout": 10
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/bryan/Desktop/myllm/.codex/hooks/gridline/ponytail_context.cjs post-tool",
+            "command": "node \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/gridline/ponytail_context.cjs\" post-tool",
             "timeout": 10,
             "statusMessage": "Refreshing Ponytail project map"
           }

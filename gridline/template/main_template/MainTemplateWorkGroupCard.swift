@@ -58,6 +58,7 @@ private enum ProjectMarkdownDocument: String, CaseIterable, Hashable, Identifiab
 struct MainTemplateWorkGroupCard: View {
     let group: SavedGroup
     let groupSessions: [TerminalSession]
+    let activeProviders: [UUID: String]
     let template: GridlineTemplate
     @ObservedObject var workspace: WorkspaceStore
     @Binding var editingGroup: UUID?
@@ -69,6 +70,7 @@ struct MainTemplateWorkGroupCard: View {
     @StateObject private var ponytailStatus = CodexHooksPanelModel()
     @StateObject private var aiWorkflowModel = CodexHooksPanelModel()
     @State private var visibleProjectDocuments: Set<ProjectMarkdownDocument> = []
+    @State private var claudeContextSignature: String?
     @State private var showingActionsDropdown = false
     @State private var showingProjectHooks = false
     @State private var showingAIWorkflow = false
@@ -81,6 +83,9 @@ struct MainTemplateWorkGroupCard: View {
     }
     private var projectMarkerDirectory: String {
         ponytailStatus.projectPath ?? projectDirectory
+    }
+    private var activeProvider: String? {
+        groupSessions.compactMap { activeProviders[$0.id] }.first
     }
     private var ponytailLogo: NSImage? {
         guard let url = Bundle.main.url(forResource: "ponytail-logo", withExtension: "png") else { return nil }
@@ -148,11 +153,20 @@ struct MainTemplateWorkGroupCard: View {
                 inspectPonytail()
             }
         }
-        .onAppear(perform: inspectPonytail)
-        .onChange(of: projectDirectory) { _ in inspectPonytail() }
-        .task(id: projectMarkerDirectory) {
+        .onAppear {
+            inspectPonytail()
+            prepareClaudeContext()
+        }
+        .onChange(of: projectDirectory) { _ in
+            inspectPonytail()
+            prepareClaudeContext()
+        }
+        .task(id: "\(projectMarkerDirectory)|\(activeProvider ?? "none")") {
             while !Task.isCancelled {
-                let documents = Self.configuredProjectDocuments(at: projectMarkerDirectory)
+                prepareClaudeContext()
+                let documents = activeProvider.flatMap(SessionKind.init(rawValue:)).map {
+                    Self.configuredProjectDocuments(at: projectMarkerDirectory, provider: $0)
+                } ?? []
                 if visibleProjectDocuments != documents { visibleProjectDocuments = documents }
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
@@ -412,24 +426,52 @@ struct MainTemplateWorkGroupCard: View {
         ponytailStatus.run(action: "inspect", directory: projectDirectory)
     }
 
-    private static func configuredProjectDocuments(at root: String) -> Set<ProjectMarkdownDocument> {
-        let projectURL = URL(fileURLWithPath: root, isDirectory: true)
-        let hooksURL = projectURL.appendingPathComponent(".codex/hooks.json", isDirectory: false)
-        guard let data = try? Data(contentsOf: hooksURL),
-              let hooks = try? JSONSerialization.jsonObject(with: data) else { return [] }
+    private func prepareClaudeContext() {
+        let directory = URL(fileURLWithPath: projectDirectory, isDirectory: true).standardizedFileURL.path
+        let files = [".codex/ponytail.md", ".codex/RUST_SKILL.md", "app_design/this_app_design_today.md"]
+        let sizes = files.map { file in
+            let path = URL(fileURLWithPath: projectMarkerDirectory).appendingPathComponent(file).path
+            return (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.stringValue ?? "missing"
+        }
+        let signature = ([directory, projectMarkerDirectory] + sizes).joined(separator: "|")
+        guard signature != claudeContextSignature else { return }
+        claudeContextSignature = signature
+        CodexHooksPanelModel.installClaudeContextAutomatically(directory: directory)
+    }
 
+    private static func configuredProjectDocuments(at root: String, provider: SessionKind) -> Set<ProjectMarkdownDocument> {
+        guard provider == .codex || provider == .claude else { return [] }
+        let projectURL = URL(fileURLWithPath: root, isDirectory: true)
+        let isClaude = provider == .claude
+        let hooksURL = projectURL.appendingPathComponent(isClaude ? ".claude/settings.json" : ".codex/hooks.json", isDirectory: false)
         func referencesHook(_ value: Any, named hookName: String) -> Bool {
             if let string = value as? String { return string.contains(hookName) }
             if let array = value as? [Any] { return array.contains { referencesHook($0, named: hookName) } }
             if let object = value as? [String: Any] { return object.values.contains { referencesHook($0, named: hookName) } }
             return false
         }
+        guard let data = try? Data(contentsOf: hooksURL),
+              let hooks = try? JSONSerialization.jsonObject(with: data) else { return [] }
 
         return Set(ProjectMarkdownDocument.allCases.filter { document in
             FileManager.default.fileExists(atPath: projectURL.appendingPathComponent(document.path).path) &&
-            FileManager.default.fileExists(atPath: projectURL.appendingPathComponent(document.hookPath).path) &&
-            referencesHook(hooks, named: document.hookScript)
+            (isClaude
+                ? ((FileManager.default.fileExists(atPath: projectURL.appendingPathComponent(".claude/hooks/gridline/gridline_context.cjs").path) && referencesHook(hooks, named: "chunked-context-v1") && (document == .rustSkill ? FileManager.default.fileExists(atPath: projectURL.appendingPathComponent(".claude/hooks/gridline/rust-enabled").path) : referencesCodexHook(document, root: projectURL))) ||
+                   (FileManager.default.fileExists(atPath: projectURL.appendingPathComponent(".claude/hooks/gridline/\(document.hookScript)").path) && referencesHook(hooks, named: document.hookScript)))
+                : FileManager.default.fileExists(atPath: projectURL.appendingPathComponent(document.hookPath).path) && referencesHook(hooks, named: document.hookScript))
         })
+    }
+
+    private static func referencesCodexHook(_ document: ProjectMarkdownDocument, root: URL) -> Bool {
+        let url = root.appendingPathComponent(".codex/hooks.json")
+        guard let data = try? Data(contentsOf: url), let hooks = try? JSONSerialization.jsonObject(with: data) else { return false }
+        func contains(_ value: Any) -> Bool {
+            if let string = value as? String { return string.contains(document.hookScript) }
+            if let array = value as? [Any] { return array.contains(where: contains) }
+            if let object = value as? [String: Any] { return object.values.contains(where: contains) }
+            return false
+        }
+        return contains(hooks)
     }
 
     @ViewBuilder
@@ -472,7 +514,7 @@ struct MainTemplateWorkGroupCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(document.path) · \(document.loadingDescription)")
+        .help("\(document.path) · \((activeProvider == SessionKind.claude.rawValue) ? "Claude receives this at startup and on every prompt" : document.loadingDescription)")
         .accessibilityLabel("Open \(document.editorLabel): \(document.path)")
         .accessibilityIdentifier("gridline.group.\(document.iconIdentifierStem).\(group.id.uuidString)")
     }

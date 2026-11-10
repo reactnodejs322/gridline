@@ -75,9 +75,7 @@ final class InspectorStore: ObservableObject {
 
     func refreshPermissionState() {
         let trusted = AXIsProcessTrusted()
-        let permissionWasGranted = !isTrusted && trusted
         isTrusted = trusted
-        if permissionWasGranted { startInspecting() }
     }
 
     func startInspecting() {

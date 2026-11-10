@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -117,10 +116,11 @@ def hook_group(command: str, matcher: str | None = None, status: str | None = No
     return group
 
 
-def configure_ponytail(hooks: dict[str, Any], script: Path) -> None:
+def configure_ponytail(hooks: dict[str, Any]) -> None:
     for event in ("SessionStart", "UserPromptSubmit", "PostToolUse"):
         remove_owned(hooks, event, {"gridline/ponytail_context.cjs"})
-    command = f"node {shlex.quote(str(script))}"
+    project_root = '"$(git rev-parse --show-toplevel 2>/dev/null || pwd)"'
+    command = f"node {project_root}/.codex/hooks/gridline/ponytail_context.cjs"
     append_handler(hooks, "SessionStart", hook_group(
         f"{command} session-start", "startup|resume|clear|compact", "Loading Ponytail project context"
     ))
@@ -130,14 +130,55 @@ def configure_ponytail(hooks: dict[str, Any], script: Path) -> None:
     ))
 
 
-def configure_compactions(hooks: dict[str, Any], script: Path, enabled: bool) -> None:
+def configure_compactions(hooks: dict[str, Any], enabled: bool) -> None:
     for event in ("PreCompact", "PostCompact"):
         remove_owned(hooks, event, {"gridline_codex_hook.py"})
     if not enabled:
         return
-    command = f"python3 {shlex.quote(str(script))}"
+    project_root = '"$(git rev-parse --show-toplevel 2>/dev/null || pwd)"'
+    command = f"python3 {project_root}/.codex/hooks/gridline/gridline_codex_hook.py"
     append_handler(hooks, "PreCompact", hook_group(f"{command} compact", "manual|auto"))
     append_handler(hooks, "PostCompact", hook_group(f"{command} compact", "manual|auto"))
+
+
+def configure_claude_context(settings: dict[str, Any], parts: int) -> None:
+    hooks = settings.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        raise InstallError(".claude/settings.json has an unsupported hooks shape; it was left unchanged.")
+    for event in ("SessionStart", "UserPromptSubmit"):
+        remove_owned(hooks, event, {"gridline_context.cjs"})
+    if not parts:
+        return
+    command = 'node "${CLAUDE_PROJECT_DIR}/.claude/hooks/gridline/gridline_context.cjs"'
+    for part in range(parts):
+        append_handler(hooks, "SessionStart", hook_group(f"{command} session-start chunked-context-v1 {part} {parts}", "startup|resume|clear|compact"))
+        append_handler(hooks, "UserPromptSubmit", hook_group(f"{command} prompt-submit chunked-context-v1 {part} {parts}"))
+
+
+def claude_context_files(project: Path, settings: dict[str, Any]) -> list[tuple[str, str]]:
+    codex_config = read_config(project / ".codex" / "hooks.json")
+    hooks = codex_config["hooks"]
+    claude_hooks = settings.get("hooks", {}) if isinstance(settings.get("hooks", {}), dict) else {}
+    documents = (
+        (".codex/ponytail.md", "ponytail_context.cjs"),
+        ("app_design/this_app_design_today.md", "map_design_context.cjs"),
+        (".codex/RUST_SKILL.md", "rust_skill_context.cjs"),
+    )
+    rust_enabled = (project / ".claude/hooks/gridline/rust-enabled").is_file()
+    active = []
+    for path, name in documents:
+        if not (project / path).is_file():
+            continue
+        if name == "rust_skill_context.cjs":
+            if rust_enabled:
+                active.append((path, name))
+            continue
+        if any(command_contains(handler, name)
+               for groups in list(hooks.values()) + list(claude_hooks.values()) if isinstance(groups, list)
+               for group in groups if isinstance(group, dict)
+               for handler in group.get("hooks", []) if isinstance(group.get("hooks", []), list)):
+            active.append((path, name))
+    return active
 
 
 def save_config(path: Path, value: dict[str, Any]) -> None:
@@ -179,6 +220,49 @@ def install(args: argparse.Namespace) -> dict[str, Any]:
     except (OSError, subprocess.SubprocessError):
         pass
     resource = Path(args.resource_root).resolve(strict=True)
+    if args.action in {"install-claude-context", "install-claude-rust"}:
+        settings_path = project / ".claude" / "settings.json"
+        if settings_path.exists():
+            try:
+                settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as error:
+                raise InstallError("Could not read .claude/settings.json; it was left unchanged.") from error
+            if not isinstance(settings, dict):
+                raise InstallError(".claude/settings.json has an unsupported shape; it was left unchanged.")
+        else:
+            settings = {"hooks": {}}
+        if args.action == "install-claude-rust":
+            managed_dir = project / ".claude" / "hooks" / "gridline"
+            marker = managed_dir / OWNED_DIRECTORY_MARKER
+            if managed_dir.exists() and not marker.exists():
+                raise InstallError(".claude/hooks/gridline exists and is not marked as Gridline-managed; no files were replaced.")
+            managed_dir.mkdir(parents=True, exist_ok=True)
+            if not marker.exists():
+                atomic_write(marker, b"Managed by Gridline. Only files in this folder are Gridline-owned.\n")
+            atomic_write(managed_dir / "rust-enabled", b"Enabled by the work-group Project hooks menu.\n")
+        documents = claude_context_files(project, settings)
+        context_bytes = sum((project / path).stat().st_size + 256 for path, _ in documents)
+        parts = (context_bytes + 3999) // 4000 + 1 if documents else 0
+        configure_claude_context(settings, parts)
+        if documents:
+            managed_dir = project / ".claude" / "hooks" / "gridline"
+            marker = managed_dir / OWNED_DIRECTORY_MARKER
+            if managed_dir.exists() and not marker.exists():
+                raise InstallError(".claude/hooks/gridline exists and is not marked as Gridline-managed; no files were replaced.")
+            managed_dir.mkdir(parents=True, exist_ok=True)
+            if not marker.exists():
+                atomic_write(marker, b"Managed by Gridline. Only files in this folder are Gridline-owned.\n")
+            copy_managed(resource / "gridline_context.cjs", managed_dir / "gridline_context.cjs", executable=True)
+        if documents or settings_path.exists():
+            save_config(settings_path, settings)
+        return {
+            "ok": True,
+            "projectPath": str(project),
+            "claudeContextInstalled": bool(documents),
+            "claudeRustEnabled": (project / ".claude/hooks/gridline/rust-enabled").is_file(),
+            "claudeContextDocuments": [path for path, _ in documents],
+        }
+
     if args.action == "install-ai-workflow":
         guides = (resource / "agent_workflow.md", resource / "fix_ai_workflow.md")
         docs = project / "docs"
@@ -217,6 +301,7 @@ def install(args: argparse.Namespace) -> dict[str, Any]:
             "ponytailInstalled": ponytail_enabled(hooks),
             "compactionLoggingEnabled": compact_enabled(hooks),
             "ponytailFileExists": (codex_dir / "ponytail.md").is_file(),
+            "claudeRustEnabled": (project / ".claude/hooks/gridline/rust-enabled").is_file(),
         }
 
     wants_ponytail = args.action in {"install-ponytail", "install-all"}
@@ -242,12 +327,12 @@ def install(args: argparse.Namespace) -> dict[str, Any]:
         context = codex_dir / "ponytail.md"
         if not context.exists():
             copy_managed(resource / "ponytail.md.template", context)
-        configure_ponytail(hooks, managed_dir / "ponytail_context.cjs")
+        configure_ponytail(hooks)
     if wants_compactions:
         copy_managed(resource / "gridline_codex_hook.py", managed_dir / "gridline_codex_hook.py", executable=True)
-        configure_compactions(hooks, managed_dir / "gridline_codex_hook.py", True)
+        configure_compactions(hooks, True)
     if disables_compactions:
-        configure_compactions(hooks, managed_dir / "gridline_codex_hook.py", False)
+        configure_compactions(hooks, False)
 
     save_config(config_path, config)
     return {
@@ -262,7 +347,7 @@ def install(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("inspect", "install-ponytail", "enable-compactions", "disable-compactions", "install-all", "install-ai-workflow"))
+    parser.add_argument("action", choices=("inspect", "install-ponytail", "enable-compactions", "disable-compactions", "install-all", "install-ai-workflow", "install-claude-context", "install-claude-rust"))
     parser.add_argument("--project-root", required=True)
     parser.add_argument("--resource-root", required=True)
     args = parser.parse_args()

@@ -20,7 +20,6 @@ struct MyLLMDebugApp: App {
                 .preferredColorScheme(.dark)
                 .task {
                     inspector.refreshPermissionState()
-                    if inspector.isTrusted { inspector.startInspecting() }
                     while !Task.isCancelled {
                         inspector.refreshLogs()
                         try? await Task.sleep(nanoseconds: 2_000_000_000)

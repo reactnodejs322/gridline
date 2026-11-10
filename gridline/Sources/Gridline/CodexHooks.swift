@@ -7,6 +7,7 @@ struct CodexHookInstallResult: Decodable {
     let ponytailInstalled: Bool?
     let compactionLoggingEnabled: Bool?
     let ponytailFileExists: Bool?
+    let claudeRustEnabled: Bool?
     let aiWorkflowGuidesAvailable: Bool?
     let agentInstructionsFileExists: Bool?
     let agentInstructionsFileName: String?
@@ -20,10 +21,15 @@ final class CodexHooksPanelModel: ObservableObject {
     @Published var status = ""
     @Published var ponytailInstalled = false
     @Published var compactionLoggingEnabled = false
+    @Published var claudeRustEnabled = false
     @Published var docsFolderConflict = false
     @Published var agentInstructionsFileExists = false
     @Published var agentInstructionsFileName = "AGENTS.md"
     @Published var projectPath: String?
+
+    static func installClaudeContextAutomatically(directory: String) {
+        CodexHooksPanelModel().run(action: "install-claude-context", directory: directory)
+    }
 
     func run(action: String, directory: String, completion: ((CodexHookInstallResult?) -> Void)? = nil) {
         guard !isBusy else { return }
@@ -87,6 +93,7 @@ final class CodexHooksPanelModel: ObservableObject {
                     if let result {
                         if let installed = result.ponytailInstalled { self.ponytailInstalled = installed }
                         if let enabled = result.compactionLoggingEnabled { self.compactionLoggingEnabled = enabled }
+                        if let enabled = result.claudeRustEnabled { self.claudeRustEnabled = enabled }
                         if let conflict = result.docsFolderConflict { self.docsFolderConflict = conflict }
                         if let fileExists = result.agentInstructionsFileExists { self.agentInstructionsFileExists = fileExists }
                         if let fileName = result.agentInstructionsFileName { self.agentInstructionsFileName = fileName }
@@ -99,6 +106,7 @@ final class CodexHooksPanelModel: ObservableObject {
                             case "install-ponytail": self.status = "Ponytail is installed in \(project). Existing Ponytail rules were kept."
                             case "enable-compactions": self.status = "Codex compaction logging is enabled for \(project)."
                             case "disable-compactions": self.status = "Codex compaction logging is disabled for \(project)."
+                            case "install-claude-rust": self.status = "Claude Rust guidance is enabled for \(project)."
                             default: self.status = "Codex hooks are installed in \(project)."
                             }
                         } else {
@@ -149,13 +157,24 @@ struct CodexHooksPanel: View {
 
             MainTemplateDropdownActionRow(
                 title: model.ponytailInstalled ? "Update Ponytail setup" : "Install Ponytail",
-                subtitle: "Add Ponytail rules under this project's .codex folder",
+                subtitle: "Add Ponytail rules and enable matching Claude context",
                 systemImage: "puzzlepiece.extension",
                 tint: palette.accent,
                 identifier: "gridline.group.hooks.ponytail.\(groupID.uuidString)",
                 isDisabled: model.isBusy
             ) {
                 run("install-ponytail")
+            }
+
+            MainTemplateDropdownActionRow(
+                title: model.claudeRustEnabled ? "Rust guidance enabled for Claude" : "Enable Rust guidance for Claude",
+                subtitle: "Load .codex/RUST_SKILL.md at Claude startup and on each prompt",
+                systemImage: "shippingbox",
+                tint: palette.accent,
+                identifier: "gridline.group.hooks.claudeRust.\(groupID.uuidString)",
+                isDisabled: model.isBusy || model.claudeRustEnabled
+            ) {
+                run("install-claude-rust")
             }
 
             MainTemplateDropdownActionRow(
@@ -210,6 +229,9 @@ struct CodexHooksPanel: View {
                 "groupName": groupName,
                 "pipeline": "MainTemplateWorkGroupCard.swift:projectHooks > CodexHooks.swift:CodexHooksPanelModel.run > hooks/install_project_hooks.py"
             ])
+            if action == "install-ponytail" {
+                CodexHooksPanelModel.installClaudeContextAutomatically(directory: directory)
+            }
         }
     }
 }
